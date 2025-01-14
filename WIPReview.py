@@ -71,11 +71,6 @@ class WIPreview(object):
     self.wFENote = myFENote
     self.wEntRef = myEntRef
     self.wMatNo = myMatNo
-
-    #if myReqWO == 'Y':
-    #  self.wReqWO = True    #myReqWO
-    #else:
-    #  self.wReqWO = False
     self.wReqWO = True if myReqWO == 'Y' else False
     self.wHODwoStatus = myHODwoStatus
     self.wWOType = myWOType
@@ -111,8 +106,7 @@ def refreshWIPReviewDataGrid(s, event):
   if cbo_FeeEarner.SelectedIndex == -1:
     MessageBox.Show("No items to show as a Fee Earner hasn't been selected from the drop-down.\n\nPlease note that only the Accounts department are able to select a different Fee Earner", "Refresh WIP Review List...")
     return
-  
-  # Form the SQL
+
   # Form the SQL
   wip_SQL = "SELECT  '0-OurRef' = E.ShortCode + '/' + CONVERT(varchar, M.Number), "
   wip_SQL += "'1-Client Name' = E.Name, '2-Matter Description' = M.Description, "
@@ -208,7 +202,6 @@ def cellEdit_Finished(s, event):
   countToUpdate = 0
   global UserIsHOD
 
-  #MessageBox.Show('Column Name: ' + tmpColName + '\nIDtoUpdate: ' + str(IDtoUpdate))
   # count if there are any rows in Usr_AccWIP and if zero, add a new row with default data
   countExistingRows = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_AccWIP WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
   if int(countExistingRows) == 0:
@@ -224,8 +217,6 @@ def cellEdit_Finished(s, event):
       countToUpdate += 1
   
   if tmpColName == 'Write-Off Type':
-    #MessageBox.Show('Column name IS correct (Write-Off Type)')
-    #MessageBox.Show("tmpWO_Type: " + tmpWO_Type + "\nlbl_tmpWOtype: " + str(lbl_tmpWOtype.Content))
     if tmpWO_Type == '(clear)':
       updateSQL += "WriteOffType = null " 
       countToUpdate += 1
@@ -252,13 +243,6 @@ def cellEdit_Finished(s, event):
     else:
       _tikitResolver.Resolve("[SQL: UPDATE Usr_AccWIPreply SET LastUpdated = '{0}' WHERE UserCode = '{1}']".format(newDate, _tikitUser))
 
-    #refreshWIPReviewDataGrid(s, event)
-    # Switching off the Refresh for now to test to see if it resolves a WPF bug (throws error when you have sorted a column and go to update a note -
-    #  it advises that sorting cannot be done when in AddNew or Edit mode). I do not think we actually need this refresh, as we have already done update,
-    #  it was more for my benefit of seeing/confirming that it did indeed update correctly (else text would have disappeared if not saved).
-    # YEP - Can confirm that it still works fine without this refresh, and in fact is better else FE my need to click sort column again.
-  
-  # just update the ticked counter
   updated_TickedStatus(s, event)
   return
 
@@ -296,7 +280,6 @@ def populate_SortByList(s, event):
   
   cbo_SortBy.ItemsSource = myItems
   return
-
 
 class UsersList(object):
   def __init__(self, myFECode, myFEName):
@@ -336,7 +319,6 @@ def populate_FeeEarnersList(s, event):
 
 
 def setFE_toCurrentUser(s, event):
-  #MessageBox.Show('Current user code = ' + str(_tikitUser))
   tCount = -1
   tMatchFound = False
 
