@@ -24,27 +24,16 @@ from System.Windows.Data import Binding
 from System.Windows.Forms import SelectionMode, MessageBox, MessageBoxButtons, DialogResult
 from System.Windows.Input import KeyEventHandler
 from System.Windows.Media import Brush, Brushes
+import thread
+import time
 from TWUtils import *
 
- # TODO: Remove all utility functions to the TWUtils file
  # TODO: Refactor main WIPReview datagrid, to match expected fields for the file closure tool
  # TODO: draft tables and structure for the checklist.
- 
 
 #Global Variables
-myVATRate = 0.2
-myZeroVal = 0.00
-myNotEntered = ""
-FREQ_1 = 'Annum'
-FREQ_2 = 'Half Year'
-FREQ_3 = 'Month'
-FREQ_4 = 'Quarter'
-YesNoNA_1 = 'N/A'
-YesNoNA_2 = 'No'
-YesNoNA_3 = 'Yes'
 UserIsHOD = False
 all_ticked = False
-
 
 ## Main WIP Review DataGrid
 class WIPreview(object):
@@ -75,7 +64,7 @@ class WIPreview(object):
     self.wReqWO = True if myReqWO == 'Y' else False
     self.wHODwoStatus = myHODwoStatus
     self.wWOType = myWOType
-    self.wWOTypeItems = get_WOTypes()
+    self.wWOTypeItems = ["Full WriteOff", "Partial WriteOff", "(clear)"]
     return
 
   def __getitem__(self, index):
@@ -109,28 +98,58 @@ def refreshWIPReviewDataGrid(s, event):
     return
   
   # Form the SQL
-  # Form the SQL
-  wip_SQL = "SELECT  '0-OurRef' = E.ShortCode + '/' + CONVERT(varchar, M.Number), "
-  wip_SQL += "'1-Client Name' = E.Name, '2-Matter Description' = M.Description, "
-  wip_SQL += "'3-Client Monies' = M.Client_Ac_Balance, "
-  wip_SQL += "'4-Ring Fenced' = M.RingFencedClientBalance, "
-  wip_SQL += "'5-Office Balance' = M.Office_Ac_Balance, "
-  wip_SQL += "'6-Deposit Balance' = M.Depost_Ac_Balance, "
-  wip_SQL += "'7-Unbilled Disbs' = M.UnbilledDisbBalance, "
-  wip_SQL += "'8-Anticipated Disbs' = M.AnticipatedDisbsBalance, "
-  wip_SQL += "'9-Matter WIP' = (SELECT SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number), "
-  wip_SQL += "'10-Your WIP' = (SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number AND TT.FeeEarnerRef = M.FeeEarnerRef), "
-  wip_SQL += "'11-Created' = M.Created, "
-  wip_SQL += "'12-Last Bill Date' = CASE WHEN M.LastBillPostingDate IS NULL THEN 'Not billed yet' ELSE CONVERT(VARCHAR(12), M.LastBillPostingDate, 103) END, "
-  wip_SQL += "'13-Date of Last Time Entry' = (SELECT MAX(TT.DateStamp) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number), "
-  wip_SQL += "'14-Actions / Notes' = ISNULL(mWIP.FE_Notes, ''), "
-  wip_SQL += "'15-EntRef' = M.EntityRef, '16-MatNo' = M.Number, '17-LastUpdated' = mWIP.LastUpdated, "
-  wip_SQL += "'18-WriteOff_Req' = ISNULL(mWIP.WriteOff, ''), '19-WriteOff_HODStatus' = ISNULL(mWIP.WO_Approved_Status, ''), '20-WriteOffType' = mWIP.WriteOffType "
-  wip_SQL += "FROM Matters M "
-  wip_SQL += "LEFT OUTER JOIN Entities E ON M.EntityRef = E.Code "
-  wip_SQL += "LEFT OUTER JOIN Usr_AccWIP mWIP ON mWIP.EntityRef = M.EntityRef AND mWIP.MatterNo = M.Number " 
-  wip_SQL += "WHERE M.FeeEarnerRef = '" + cbo_FeeEarner.SelectedItem['Code'] + "' "
-  wip_SQL += "AND (SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number) > 0 "
+  wip_SQL = """
+  SELECT  
+      '0-OurRef' = E.ShortCode + '/' + CONVERT(varchar, M.Number), 
+      '1-Client Name' = E.Name, 
+      '2-Matter Description' = M.Description, 
+      '3-Client Monies' = M.Client_Ac_Balance, 
+      '4-Ring Fenced' = M.RingFencedClientBalance, 
+      '5-Office Balance' = M.Office_Ac_Balance, 
+      '6-Deposit Balance' = M.Depost_Ac_Balance, 
+      '7-Unbilled Disbs' = M.UnbilledDisbBalance, 
+      '8-Anticipated Disbs' = M.AnticipatedDisbsBalance, 
+      '9-Matter WIP' = (
+          SELECT SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled) 
+          FROM TimeTransactions TT 
+          WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number
+      ), 
+      '10-Your WIP' = (
+          SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00) 
+          FROM TimeTransactions TT 
+          WHERE TT.EntityRef = M.EntityRef 
+            AND TT.MatterNoRef = M.Number 
+            AND TT.FeeEarnerRef = M.FeeEarnerRef
+      ), 
+      '11-Created' = M.Created, 
+      '12-Last Bill Date' = CASE 
+          WHEN M.LastBillPostingDate IS NULL THEN 'Not billed yet' 
+          ELSE CONVERT(VARCHAR(12), M.LastBillPostingDate, 103) 
+      END, 
+      '13-Date of Last Time Entry' = (
+          SELECT MAX(TT.DateStamp) 
+          FROM TimeTransactions TT 
+          WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number
+      ), 
+      '14-Actions / Notes' = ISNULL(mWIP.FE_Notes, ''), 
+      '15-EntRef' = M.EntityRef, 
+      '16-MatNo' = M.Number, 
+      '17-LastUpdated' = mWIP.LastUpdated, 
+      '18-WriteOff_Req' = ISNULL(mWIP.WriteOff, ''), 
+      '19-WriteOff_HODStatus' = ISNULL(mWIP.WO_Approved_Status, ''), 
+      '20-WriteOffType' = mWIP.WriteOffType
+  FROM 
+      Matters M
+      LEFT OUTER JOIN Entities E ON M.EntityRef = E.Code
+      LEFT OUTER JOIN Usr_AccWIP mWIP ON mWIP.EntityRef = M.EntityRef AND mWIP.MatterNo = M.Number
+  WHERE 
+      M.FeeEarnerRef = '{fee_earner_code}'
+      AND (
+          SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00)
+          FROM TimeTransactions TT
+          WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number
+      ) > 0
+  """.format(fee_earner_code=cbo_FeeEarner.SelectedItem['Code'])
 
   if opt_OnlyShowWOComments.IsChecked == True:
     wip_SQL += "AND ISNULL(mWIP.FE_Notes, '') = '' "
@@ -188,8 +207,6 @@ def refreshWIPReviewDataGrid(s, event):
 
 
 def cellEdit_Finished(s, event):
-  # Yay, this works - note DO NOT include 'CellEditEnding=' within XAML - ONLY list within Python
-  #MessageBox.Show('Item Value? : ' + event.Row.Item.ToString())
   
   # Get column name
   tmpCol = event.Column
@@ -246,12 +263,6 @@ def cellEdit_Finished(s, event):
     else:
       _tikitResolver.Resolve("[SQL: UPDATE Usr_AccWIPreply SET LastUpdated = '{0}' WHERE UserCode = '{1}']".format(newDate, _tikitUser))
 
-    #refreshWIPReviewDataGrid(s, event)
-    # Switching off the Refresh for now to test to see if it resolves a WPF bug (throws error when you have sorted a column and go to update a note -
-    #  it advises that sorting cannot be done when in AddNew or Edit mode). I do not think we actually need this refresh, as we have already done update,
-    #  it was more for my benefit of seeing/confirming that it did indeed update correctly (else text would have disappeared if not saved).
-    # YEP - Can confirm that it still works fine without this refresh, and in fact is better else FE my need to click sort column again.
-  
   # just update the ticked counter
   updated_TickedStatus(s, event)
   return
@@ -330,7 +341,6 @@ def populate_FeeEarnersList(s, event):
 
 
 def setFE_toCurrentUser(s, event):
-  #MessageBox.Show('Current user code = ' + str(_tikitUser))
   tCount = -1
   tMatchFound = False
 
@@ -571,13 +581,35 @@ def refresh_Matter_UnbilledTime(s, event):
   showFor = dg_TimeUsers.SelectedItem['Code']
   tmpCountRows = 0
 
-  time_SQL = "SELECT '0-Transaction Date' = TT.TransactionDate, '1-Quantity Of Time' = TT.QuantityOfTime / 60, "
-  time_SQL += "'2-Value Of Time' = TT.ValueOfTime - TT.TimeValueBilled, '3-Activity Type' = ActT.Description, "
-  time_SQL += "'4-Narrative' = TT.Narratives + TT.Narrative2 + TT.Narrative3, "
-  time_SQL += "'5-Originator' = (SELECT FullName FROM Users U WHERE U.Code = TT.Originator) "
-  time_SQL += "FROM TimeTransactions TT, ActivityTypes ActT "
-  time_SQL += "WHERE TT.ActivityCodeRef = ActT.Code AND ActT.ChargeType = 'C' AND TT.TransactionType LIKE '%Time' "
-  time_SQL += "AND TT.EntityRef = '" + tmpEntity + "' AND TT.MatterNoRef = " + str(tmpMatter) + " AND TT.ValueOfTime - TT.TimeValueBilled > 0 "
+  time_SQL = """
+  SELECT ToShowName, Code, TotalTime, ValOfTime 
+  FROM (
+      SELECT 'ToShowName' = 'SHOW ALL TIME', 
+            'Code' = 'x', 
+            'TotalTime' = SUM(TT.QuantityOfTime) / 60, 
+            'ValOfTime' = ISNULL(SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled), 0.00), 
+            'mOrder' = 0 
+      FROM TimeTransactions TT 
+      WHERE TT.EntityRef = '{entity}' 
+        AND TT.MatterNoRef = {matter} 
+        AND TT.ValueOfTime - TT.TimeValueBilled > 0
+
+      UNION 
+
+      SELECT 'ToShowName' = U.FullName, 
+            'Code' = U.Code, 
+            'TotalTime' = SUM(TT.QuantityOfTime) / 60, 
+            'ValOfTime' = ISNULL(SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled), 0.00), 
+            'mOrder' = 2 
+      FROM TimeTransactions TT 
+      JOIN Users U ON TT.Originator = U.Code 
+      WHERE TT.EntityRef = '{entity}' 
+        AND TT.MatterNoRef = {matter} 
+        AND TT.ValueOfTime - TT.TimeValueBilled > 0 
+      GROUP BY U.FullName, U.Code
+  ) AS tmpT 
+  ORDER BY mOrder
+  """.format(entity=myEntRef, matter=myMatNo)
   if str(showFor) != 'x':
     time_SQL += "AND TT.Originator = '" + str(showFor) + "' "
   time_SQL += "ORDER BY TT.TransactionDate DESC"
@@ -640,15 +672,30 @@ def refresh_Matter_UnbilledDisbs(s, event):
   tmpMatter = dg_WIPReview.SelectedItem['MatterNo']
   tmpCount = 0
 
-  disb_SQL = "SELECT '0-Transaction Number' = AcD.TransactionNo, '1-Disb Reference' = AcD.Ref, "
-  disb_SQL += "'2-Date' = AcD.DisbDate, '3-Narrative' = AcD.Narrative1, '4-Net' = AcDV.Net, "
-  disb_SQL += "'5-Net Billed' = AcDV.Net_Billed, '6-Net Paid' = AcDV.Net_Paid, '7-Unbilled Value' = AcDV.Net_Paid - AcDV.Net_Billed, "
-  disb_SQL += "'8-Days Outstanding' = DATEDIFF(dd, RIGHT(AcD.DisbDate, 4) + SUBSTRING(AcD.DisbDate, 4, 2) + LEFT(AcD.DisbDate, 2), GETDATE()) "
-  disb_SQL += "FROM Ac_Disbursements AcD JOIN Ac_Disbursements_VAT AcDV ON AcD.TransactionNo = AcDV.Disbs_ID "
-  disb_SQL += "AND AcD.AnticipatedNo = AcDV.AnticipatedNo "
-  disb_SQL += "WHERE AcD.Type = 'UnBilled'  AND LEN(DisbDate) = 10 "
-  disb_SQL += "AND AcD.ClientCode = '" + tmpEntity + "' AND AcD.MatterNo = " + str(tmpMatter) + " "
-  disb_SQL += "ORDER BY RIGHT(DisbDate, 4) + SUBSTRING(DisbDate, 4, 2) + LEFT(DisbDate, 2)"
+  disb_SQL = """
+  SELECT 
+      '0-Transaction Number' = AcD.TransactionNo, 
+      '1-Disb Reference' = AcD.Ref, 
+      '2-Date' = AcD.DisbDate, 
+      '3-Narrative' = AcD.Narrative1, 
+      '4-Net' = AcDV.Net, 
+      '5-Net Billed' = AcDV.Net_Billed, 
+      '6-Net Paid' = AcDV.Net_Paid, 
+      '7-Unbilled Value' = AcDV.Net_Paid - AcDV.Net_Billed, 
+      '8-Days Outstanding' = DATEDIFF(dd, RIGHT(AcD.DisbDate, 4) + SUBSTRING(AcD.DisbDate, 4, 2) + LEFT(AcD.DisbDate, 2), GETDATE())
+  FROM 
+      Ac_Disbursements AcD 
+      JOIN Ac_Disbursements_VAT AcDV 
+          ON AcD.TransactionNo = AcDV.Disbs_ID 
+          AND AcD.AnticipatedNo = AcDV.AnticipatedNo
+  WHERE 
+      AcD.Type = 'UnBilled'  
+      AND LEN(DisbDate) = 10 
+      AND AcD.ClientCode = '{entity}' 
+      AND AcD.MatterNo = {matter}
+  ORDER BY 
+      RIGHT(DisbDate, 4) + SUBSTRING(DisbDate, 4, 2) + LEFT(DisbDate, 2)
+  """.format(entity=tmpEntity, matter=tmpMatter)
 
   # Open and store items in code
   _tikitDbAccess.Open(disb_SQL)
@@ -716,13 +763,20 @@ def refresh_Matter_UnpaidBills(s, event):
   tmpMatter = dg_WIPReview.SelectedItem['MatterNo']
   tmpCount = 0
 
-  bill_SQL = "SELECT '0-Outstanding Total' = AcBB.OutstandingTotal, '1-Bill Date' = AcBB.BillDate, "
-  bill_SQL += "'2-Type' = AcBB.Type, '3-Period' = Period, '4-Year' = Year, "
-  bill_SQL += "'5-Days Outstanding' = DATEDIFF(dd, AcBB.BillDate, GETDATE()) "
-  bill_SQL += "FROM Ac_Billbook AcBB "
-  bill_SQL += "WHERE AcBB.Type = 'Posted' AND AcBB.OutstandingTotal > 0 "
-  bill_SQL += "AND AcBB.EntityRef = '" + tmpEntity + "' AND AcBB.MatterRef = " + str(tmpMatter) + " "
-  bill_SQL += "ORDER BY AcBB.BillDate"
+  bill_SQL = """
+  SELECT '0-Outstanding Total' = AcBB.OutstandingTotal, 
+        '1-Bill Date' = AcBB.BillDate, 
+        '2-Type' = AcBB.Type, 
+        '3-Period' = Period, 
+        '4-Year' = Year, 
+        '5-Days Outstanding' = DATEDIFF(dd, AcBB.BillDate, GETDATE())
+  FROM Ac_Billbook AcBB
+  WHERE AcBB.Type = 'Posted' 
+    AND AcBB.OutstandingTotal > 0
+    AND AcBB.EntityRef = '{entity}' 
+    AND AcBB.MatterRef = {matter}
+  ORDER BY AcBB.BillDate
+  """.format(entity=tmpEntity, matter=tmpMatter)
 
   # Open and store items in code
   _tikitDbAccess.Open(bill_SQL)
@@ -832,15 +886,35 @@ def populate_TimeUsersToShow(s, event):
   myMatNo = str(dg_WIPReview.SelectedItem['MatterNo'])
   
   # now add all other users
-  time_SQL = "SELECT ToShowName, Code, TotalTime, ValOfTime FROM ("
-  time_SQL += "SELECT 'ToShowName' = 'SHOW ALL TIME', 'Code' = 'x', 'TotalTime' = SUM(TT.QuantityOfTime) / 60, "
-  time_SQL += "'ValOfTime' = ISNULL(SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled), 0.00), 'mOrder' = 0 FROM TimeTransactions TT "
-  time_SQL += "WHERE TT.EntityRef = '" + myEntRef + "' AND TT.MatterNoRef = " + str(myMatNo) + " AND TT.ValueOfTime - TT.TimeValueBilled > 0 "
-  time_SQL += "UNION SELECT 'ToShowName' = U.FullName, 'Code' = U.Code, 'TotalTime' = SUM(TT.QuantityOfTime) / 60, "
-  time_SQL += "'ValOfTime' = ISNULL(SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled), 0.00), 'mOrder' = 2 "
-  time_SQL += "FROM TimeTransactions TT JOIN Users U ON TT.Originator = U.Code "
-  time_SQL += "WHERE TT.EntityRef = '" + myEntRef + "' AND TT.MatterNoRef = " + str(myMatNo) + " AND TT.ValueOfTime - TT.TimeValueBilled > 0 "
-  time_SQL += "GROUP BY U.FullName, U.Code) as tmpT ORDER BY mOrder"
+  time_SQL = """
+  SELECT ToShowName, Code, TotalTime, ValOfTime 
+  FROM (
+      SELECT 'ToShowName' = 'SHOW ALL TIME', 
+            'Code' = 'x', 
+            'TotalTime' = SUM(TT.QuantityOfTime) / 60, 
+            'ValOfTime' = ISNULL(SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled), 0.00), 
+            'mOrder' = 0 
+      FROM TimeTransactions TT 
+      WHERE TT.EntityRef = '{entity}' 
+        AND TT.MatterNoRef = {matter} 
+        AND TT.ValueOfTime - TT.TimeValueBilled > 0
+
+      UNION 
+
+      SELECT 'ToShowName' = U.FullName, 
+            'Code' = U.Code, 
+            'TotalTime' = SUM(TT.QuantityOfTime) / 60, 
+            'ValOfTime' = ISNULL(SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled), 0.00), 
+            'mOrder' = 2 
+      FROM TimeTransactions TT 
+      JOIN Users U ON TT.Originator = U.Code 
+      WHERE TT.EntityRef = '{entity}' 
+        AND TT.MatterNoRef = {matter} 
+        AND TT.ValueOfTime - TT.TimeValueBilled > 0 
+      GROUP BY U.FullName, U.Code
+  ) AS tmpT 
+  ORDER BY mOrder
+  """.format(entity=myEntRef, matter=myMatNo)
 
   _tikitDbAccess.Open(time_SQL)
 
@@ -1017,22 +1091,46 @@ def refresh_dgClientLedger(s, event):
   myMatNo = str(dg_WIPReview.SelectedItem['MatterNo'])
   tmpCount = 0
 
-  dgClientLedgerSQL = "SELECT 'Date' = CONVERT(VARCHAR(10), myCL.Date, 103), myCL.Ref, myCL.Type, myCL.Narrative, 'VAT - O' = myCL.VAT, "
-  dgClientLedgerSQL += "'Debit - O' = myCL.Debit, 'Credit - O' = myCL.Credit, "
-  dgClientLedgerSQL += "'Balance - O' = SUM(MyCL.RowTotal) OVER (ORDER BY myCL.ID), "
-  dgClientLedgerSQL += "'Debit - C' = myCL.[Debit - C], 'Credit - C' = myCl.[Credit - C], "
-  dgClientLedgerSQL += "'Balance - C' = SUM(myCl.RowTotalC) OVER (ORDER BY myCL.ID), myCL.[Unbilled Disb], myCL.[Unpaid Bill] "
-  dgClientLedgerSQL += "FROM "
-  dgClientLedgerSQL += "(SELECT TOP(10000) ID, 'Date' = PostedDate, 'Ref' = Ref, 'Type' = Posting_Type, 'Narrative' = Narrative1 + Narrative2 + Narrative3, "
-  dgClientLedgerSQL += "'VAT' = VAT_In + VAT_Out, 'Debit' = Disbursements + Costs + Expenses - Office_Credit, 'Credit' = Office_Credit, "
-  dgClientLedgerSQL += "'RowTotal' = CASE WHEN Office_Credit > 0 THEN Office_Credit - (2 * Office_Credit) "
-  dgClientLedgerSQL += "WHEN UnBilledDisbursement = 1 THEN Disbursements + Costs + Expenses "
-  dgClientLedgerSQL += "ELSE Disbursements + Costs + Expenses + VAT_In + VAT_Out END, "
-  dgClientLedgerSQL += "'Debit - C' = Client_Debit, 'Credit - C' = Client_Credit, 'RowTotalC' = Client_Credit - Client_Debit, "
-  dgClientLedgerSQL += "'Unbilled Disb' = CASE WHEN UnBilledDisbursement = 1 THEN 'Y' ELSE 'N' END, "
-  dgClientLedgerSQL += "'Unpaid Bill' = CASE WHEN UnPaidBill = 1 THEN 'Y' ELSE 'N' END "
-  dgClientLedgerSQL += "FROM Ac_Client_Ledger_Transactions "
-  dgClientLedgerSQL += "WHERE Client_Code = '{0}' AND Matter_No = {1} ORDER BY PostedDate) as myCL".format(myEntRef, myMatNo)
+  dgClientLedgerSQL = """
+  SELECT 
+      'Date' = CONVERT(VARCHAR(10), myCL.Date, 103), 
+      myCL.Ref, 
+      myCL.Type, 
+      myCL.Narrative, 
+      'VAT - O' = myCL.VAT, 
+      'Debit - O' = myCL.Debit, 
+      'Credit - O' = myCL.Credit, 
+      'Balance - O' = SUM(myCL.RowTotal) OVER (ORDER BY myCL.ID), 
+      'Debit - C' = myCL.[Debit - C], 
+      'Credit - C' = myCL.[Credit - C], 
+      'Balance - C' = SUM(myCL.RowTotalC) OVER (ORDER BY myCL.ID), 
+      myCL.[Unbilled Disb], 
+      myCL.[Unpaid Bill]
+  FROM (
+      SELECT TOP(10000) 
+          ID, 
+          'Date' = PostedDate, 
+          'Ref' = Ref, 
+          'Type' = Posting_Type, 
+          'Narrative' = Narrative1 + Narrative2 + Narrative3, 
+          'VAT' = VAT_In + VAT_Out, 
+          'Debit' = Disbursements + Costs + Expenses - Office_Credit, 
+          'Credit' = Office_Credit, 
+          'RowTotal' = CASE 
+                          WHEN Office_Credit > 0 THEN Office_Credit - (2 * Office_Credit)
+                          WHEN UnBilledDisbursement = 1 THEN Disbursements + Costs + Expenses
+                          ELSE Disbursements + Costs + Expenses + VAT_In + VAT_Out 
+                      END, 
+          'Debit - C' = Client_Debit, 
+          'Credit - C' = Client_Credit, 
+          'RowTotalC' = Client_Credit - Client_Debit, 
+          'Unbilled Disb' = CASE WHEN UnBilledDisbursement = 1 THEN 'Y' ELSE 'N' END, 
+          'Unpaid Bill' = CASE WHEN UnPaidBill = 1 THEN 'Y' ELSE 'N' END 
+      FROM Ac_Client_Ledger_Transactions 
+      WHERE Client_Code = '{entity}' AND Matter_No = {matter} 
+      ORDER BY PostedDate
+  ) AS myCL
+  """.format(entity=myEntRef, matter=myMatNo)
 
   _tikitDbAccess.Open(dgClientLedgerSQL)
 
@@ -1085,8 +1183,6 @@ def myOnFormLoadEvent(s, event):
   UserIsHOD = canApproveSelf(userToCheck = _tikitUser)
   update_UI_For_HOD(s, event)
   ti_CaseDocs.Visibility = Visibility.Collapsed
-  ##POPULATE_AGENDA_NAMES(s, event)
-  ##refresh_CaseDocs(s, event)
   return
 
 
@@ -1101,14 +1197,11 @@ def update_UI_For_HOD(s, event):
     if UserIsHOD == True:
       tb_SubmitButton.Text = "Send to Accounts"
       btn_Submit.ToolTip = "As you are a HOD, you can click here to send your Write-Off requests directly to the Accounts department"
-      # dg_WIPReview.Columns[4].Visibility = Visibility.Collapsed
     else:
       tb_SubmitButton.Text = "SUBMIT to Team Lead"
       btn_Submit.ToolTip = "Click here to submit your Write-Off requests (Matters marked with a 'Write-Off Type') and notes to your Head Of Department for review..."    
-      # dg_WIPReview.Columns[4].Visibility = Visibility.Visible
 
   else:
-    #dg_WIPReview.Columns[4].Visibility = Visibility.Visible
     tb_SubmitButton.Text = "SUBMIT to Team Lead"
     btn_Submit.ToolTip = "Click here to submit your Write-Off requests (Matters marked with a 'Write-Off Type') and notes to your Head Of Department for review..."
   return
@@ -1118,24 +1211,6 @@ def cbo_FeeEarner_SelectionChanged(s, event):
   refreshWIPReviewDataGrid(s, event)
   update_UI_For_HOD(s, event)
   return
-
-
-def get_WOTypes():
-  # this function will populate our Write Off types into our hidden combo box (for use in the DataGrid drop-down)
-  # Reason for this is that we can't run another SQL query when adding items to DataGrid as we're currently in an open connection
-  # However, the following appears to work, presumably because we use 'STRING_AGG()' to combine multiple rows into one, and then
-  # use normal Python to split this text by the character used to separate (pipe), which puts into a list
-
-  # simpler still, distill into one 'case' statement
-  fieldRef = runSQL("SELECT CASE DB_NAME() WHEN 'Partner' THEN 7067 WHEN 'PartnerDev' THEN 7213 WHEN 'PartnerTraining' THEN 6958 END", False, "", "")
-
-  woTypes = []
-  if len(str(fieldRef)) > 0:
-    # NOTE - in Dev, field ID is 7213 - in Live, field ID is 7067 (simple fix is to hard-point to 'Live' table)
-    woTypesText = runSQL("SELECT STRING_AGG(PickText, '|') FROM Mp_Sys_FieldPick WHERE FieldRef = " + str(fieldRef), False, "", "")
-    woTypes = woTypesText.split('|')
-  woTypes.append("(clear)")
-  return woTypes  
 
 # # # # # # # # # # # #  C A S E   D O C S   -   F U N C T I O N S  # # # # # # # # # # # # # # 
 def CaseDoc_SelectionChanged(s, event):
@@ -1148,11 +1223,8 @@ def CaseDoc_SelectionChanged(s, event):
 
 
 def open_Selected_CaseDoc(s, event):
-  #MessageBox.Show('Testing open Case Doc button')
   tmpPath = dg_CaseManagerDocs.SelectedItem['Path']
   tmpName = dg_CaseManagerDocs.SelectedItem['Desc']
-
-  #MessageBox.Show('Testing open Case Doc button. \nName:' + tmpName + '\nPath:' + tmpPath)
 
   if tmpPath == '':
     MessageBox.Show("There doesn't appear to be a path to this document: \n" + str(tmpName))
@@ -1189,11 +1261,6 @@ def refresh_CaseDocs(s, event):
     dg_CaseManagerDocs.ItemsSource = None
     return 
 
-  ## originally using 'View_CaseManagerMP', however appears too slow, so trying directly with CaseManager tables
-  #sSQL = "SELECT StepId, StepDescription, StepCreated, FileName, AgendaName "
-  #sSQL += "FROM View_CaseManagerMP "
-  #sSQL += "WHERE ISNULL(FileName, '') != '' "
-
   sSQL = "SELECT CI.ItemID, CI.Description, CI.CreationDate,  CMS.FileName, Agenda.Description "
   sSQL += "FROM Cm_CaseItems CI "
   sSQL += "INNER JOIN Cm_Steps CMS ON CMS.ItemID = CI.ItemID "
@@ -1203,13 +1270,11 @@ def refresh_CaseDocs(s, event):
 
   if cbo_AgendaName.SelectedIndex == 0:
     # show ALL documents for current matter
-    #sSQL += "AND EntityRef = '" + str(dg_WIPReview.SelectedItem['EntityRef']) + "' AND MatterRef = " + str(dg_WIPReview.SelectedItem['MatterNo']) + " ORDER BY AgendaName, StepOrder "
     sSQL += "AND CMA.EntityRef = '" + str(dg_WIPReview.SelectedItem['EntityRef']) + "' AND CMA.MatterNo = " + str(dg_WIPReview.SelectedItem['MatterNo']) + " ORDER BY Agenda.ItemID, CI.ItemOrder "
     dg_CaseManagerDocs.Columns[0].Visibility = Visibility.Visible
   if cbo_AgendaName.SelectedIndex > 0:
     # just show docs for the selected Agenda
     tmpAgendaName = cbo_AgendaName.SelectedItem['ID']
-    #sSQL += "AND AgendaId = " + str(tmpAgendaName) + " ORDER BY StepOrder "
     sSQL += "AND Agenda.ItemID = " + str(tmpAgendaName) + " ORDER BY CI.ItemOrder "
     dg_CaseManagerDocs.Columns[0].Visibility = Visibility.Hidden
   sItem = []
@@ -1263,10 +1328,23 @@ def POPULATE_AGENDA_NAMES(s, event):
   if dg_WIPReview.SelectedIndex == -1 or ti_CaseDocs.Visibility == Visibility.Collapsed:
     return
 
-  mySQL = "SELECT Cm_CaseItems.Description, Cm_Agendas.ItemID, Cm_Agendas.Default_Agenda "
-  mySQL += "FROM Cm_Agendas LEFT JOIN Cm_CaseItems ON Cm_Agendas.ItemID = Cm_CaseItems.ItemID "
-  mySQL += "WHERE Cm_Agendas.EntityRef = '" + str(dg_WIPReview.SelectedItem['EntityRef']) + "' AND Cm_Agendas.MatterNo = " + str(dg_WIPReview.SelectedItem['MatterNo']) + " "
-  mySQL += "ORDER BY Cm_CaseItems.Description"
+  mySQL = """
+  SELECT 
+      Cm_CaseItems.Description, 
+      Cm_Agendas.ItemID, 
+      Cm_Agendas.Default_Agenda
+  FROM 
+      Cm_Agendas
+      LEFT JOIN Cm_CaseItems ON Cm_Agendas.ItemID = Cm_CaseItems.ItemID
+  WHERE 
+      Cm_Agendas.EntityRef = '{entity_ref}' 
+      AND Cm_Agendas.MatterNo = {matter_no}
+  ORDER BY 
+      Cm_CaseItems.Description
+  """.format(
+      entity_ref=dg_WIPReview.SelectedItem['EntityRef'], 
+      matter_no=dg_WIPReview.SelectedItem['MatterNo']
+)
 
   _tikitDbAccess.Open(mySQL)
   itemA = []
@@ -1295,7 +1373,6 @@ def POPULATE_AGENDA_NAMES(s, event):
 def caseDocsPanel_refresh(s, event):
   POPULATE_AGENDA_NAMES(s, event)
   refresh_CaseDocs(s, event)
-  #lbl_OurRefCD.Content = dg_WIPReview.SelectedItem['OurRef']
   return
 
 # #  END: C A S E   D O C S   -   F U N C T I O N S  # #

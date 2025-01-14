@@ -2,18 +2,6 @@
 
 ##### constants ########################################################
 
-myVATRate = 0.2
-myZeroVal = 0.00
-myNotEntered = ""
-FREQ_1 = 'Annum'
-FREQ_2 = 'Half Year'
-FREQ_3 = 'Month'
-FREQ_4 = 'Quarter'
-YesNoNA_1 = 'N/A'
-YesNoNA_2 = 'No'
-YesNoNA_3 = 'Yes'
-UserIsHOD = False
-all_ticked = False
 
 
 ### Approval/access checks #############################################
