@@ -75,7 +75,7 @@ class WIPreview(object):
     self.wReqWO = True if myReqWO == 'Y' else False
     self.wHODwoStatus = myHODwoStatus
     self.wWOType = myWOType
-    self.wWOTypeItems = ["Full WriteOff", "Partial WriteOff", "(clear)"]
+    self.wWOTypeItems = get_WOTypes()
     return
 
   def __getitem__(self, index):
@@ -1085,6 +1085,8 @@ def myOnFormLoadEvent(s, event):
   UserIsHOD = canApproveSelf(userToCheck = _tikitUser)
   update_UI_For_HOD(s, event)
   ti_CaseDocs.Visibility = Visibility.Collapsed
+  ##POPULATE_AGENDA_NAMES(s, event)
+  ##refresh_CaseDocs(s, event)
   return
 
 
@@ -1099,11 +1101,14 @@ def update_UI_For_HOD(s, event):
     if UserIsHOD == True:
       tb_SubmitButton.Text = "Send to Accounts"
       btn_Submit.ToolTip = "As you are a HOD, you can click here to send your Write-Off requests directly to the Accounts department"
+      # dg_WIPReview.Columns[4].Visibility = Visibility.Collapsed
     else:
       tb_SubmitButton.Text = "SUBMIT to Team Lead"
       btn_Submit.ToolTip = "Click here to submit your Write-Off requests (Matters marked with a 'Write-Off Type') and notes to your Head Of Department for review..."    
+      # dg_WIPReview.Columns[4].Visibility = Visibility.Visible
 
   else:
+    #dg_WIPReview.Columns[4].Visibility = Visibility.Visible
     tb_SubmitButton.Text = "SUBMIT to Team Lead"
     btn_Submit.ToolTip = "Click here to submit your Write-Off requests (Matters marked with a 'Write-Off Type') and notes to your Head Of Department for review..."
   return
@@ -1113,6 +1118,24 @@ def cbo_FeeEarner_SelectionChanged(s, event):
   refreshWIPReviewDataGrid(s, event)
   update_UI_For_HOD(s, event)
   return
+
+
+def get_WOTypes():
+  # this function will populate our Write Off types into our hidden combo box (for use in the DataGrid drop-down)
+  # Reason for this is that we can't run another SQL query when adding items to DataGrid as we're currently in an open connection
+  # However, the following appears to work, presumably because we use 'STRING_AGG()' to combine multiple rows into one, and then
+  # use normal Python to split this text by the character used to separate (pipe), which puts into a list
+
+  # simpler still, distill into one 'case' statement
+  fieldRef = runSQL("SELECT CASE DB_NAME() WHEN 'Partner' THEN 7067 WHEN 'PartnerDev' THEN 7213 WHEN 'PartnerTraining' THEN 6958 END", False, "", "")
+
+  woTypes = []
+  if len(str(fieldRef)) > 0:
+    # NOTE - in Dev, field ID is 7213 - in Live, field ID is 7067 (simple fix is to hard-point to 'Live' table)
+    woTypesText = runSQL("SELECT STRING_AGG(PickText, '|') FROM Mp_Sys_FieldPick WHERE FieldRef = " + str(fieldRef), False, "", "")
+    woTypes = woTypesText.split('|')
+  woTypes.append("(clear)")
+  return woTypes  
 
 # # # # # # # # # # # #  C A S E   D O C S   -   F U N C T I O N S  # # # # # # # # # # # # # # 
 def CaseDoc_SelectionChanged(s, event):
@@ -1125,8 +1148,11 @@ def CaseDoc_SelectionChanged(s, event):
 
 
 def open_Selected_CaseDoc(s, event):
+  #MessageBox.Show('Testing open Case Doc button')
   tmpPath = dg_CaseManagerDocs.SelectedItem['Path']
   tmpName = dg_CaseManagerDocs.SelectedItem['Desc']
+
+  #MessageBox.Show('Testing open Case Doc button. \nName:' + tmpName + '\nPath:' + tmpPath)
 
   if tmpPath == '':
     MessageBox.Show("There doesn't appear to be a path to this document: \n" + str(tmpName))
@@ -1163,6 +1189,11 @@ def refresh_CaseDocs(s, event):
     dg_CaseManagerDocs.ItemsSource = None
     return 
 
+  ## originally using 'View_CaseManagerMP', however appears too slow, so trying directly with CaseManager tables
+  #sSQL = "SELECT StepId, StepDescription, StepCreated, FileName, AgendaName "
+  #sSQL += "FROM View_CaseManagerMP "
+  #sSQL += "WHERE ISNULL(FileName, '') != '' "
+
   sSQL = "SELECT CI.ItemID, CI.Description, CI.CreationDate,  CMS.FileName, Agenda.Description "
   sSQL += "FROM Cm_CaseItems CI "
   sSQL += "INNER JOIN Cm_Steps CMS ON CMS.ItemID = CI.ItemID "
@@ -1172,11 +1203,13 @@ def refresh_CaseDocs(s, event):
 
   if cbo_AgendaName.SelectedIndex == 0:
     # show ALL documents for current matter
+    #sSQL += "AND EntityRef = '" + str(dg_WIPReview.SelectedItem['EntityRef']) + "' AND MatterRef = " + str(dg_WIPReview.SelectedItem['MatterNo']) + " ORDER BY AgendaName, StepOrder "
     sSQL += "AND CMA.EntityRef = '" + str(dg_WIPReview.SelectedItem['EntityRef']) + "' AND CMA.MatterNo = " + str(dg_WIPReview.SelectedItem['MatterNo']) + " ORDER BY Agenda.ItemID, CI.ItemOrder "
     dg_CaseManagerDocs.Columns[0].Visibility = Visibility.Visible
   if cbo_AgendaName.SelectedIndex > 0:
     # just show docs for the selected Agenda
     tmpAgendaName = cbo_AgendaName.SelectedItem['ID']
+    #sSQL += "AND AgendaId = " + str(tmpAgendaName) + " ORDER BY StepOrder "
     sSQL += "AND Agenda.ItemID = " + str(tmpAgendaName) + " ORDER BY CI.ItemOrder "
     dg_CaseManagerDocs.Columns[0].Visibility = Visibility.Hidden
   sItem = []
@@ -1262,6 +1295,7 @@ def POPULATE_AGENDA_NAMES(s, event):
 def caseDocsPanel_refresh(s, event):
   POPULATE_AGENDA_NAMES(s, event)
   refresh_CaseDocs(s, event)
+  #lbl_OurRefCD.Content = dg_WIPReview.SelectedItem['OurRef']
   return
 
 # #  END: C A S E   D O C S   -   F U N C T I O N S  # #
