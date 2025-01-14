@@ -1,8 +1,145 @@
 ### This file contains a number of utility functions that can be used in Tikit TMS scripts. ####
 
+import clr
+import datetime
+
+clr.AddReference('mscorlib')
+clr.AddReference('PresentationCore')
+clr.AddReference('PresentationFramework')
+clr.AddReference('System.Windows.Forms')
+import System
+
+from datetime import date, timedelta
+from System import DateTime
+from System.Diagnostics import Process
+from System.Globalization import DateTimeStyles
+from System.Collections.Generic import Dictionary
+from System.Windows import Controls, Forms, LogicalTreeHelper
+from System.Windows import Data, UIElement, Visibility, Window
+from System.Windows.Controls import Button, Canvas, GridView, GridViewColumn, ListView, Orientation
+from System.Windows.Data import Binding
+from System.Windows.Forms import SelectionMode, MessageBox, MessageBoxButtons, DialogResult
+from System.Windows.Input import KeyEventHandler
+from System.Windows.Media import Brush, Brushes
 ##### constants ########################################################
 
+### SQL tools ####################################################
 
+def runSQL(codeToRun, showError = False, errorMsgText = "", errorMsgTitle = "", apostropheHandle = 0):
+  # This function is written to handle and check inputted SQL code, and will return the result of the SQL code.
+  # It first checks the length and wrapping of the code, then attempts to execute the SQL, it has an option apostrophe handler.
+  # codeToRun     = Full SQL of code to run. No need to wrap in '[SQL: code_Here]' as we can do that here
+  # showError     = True / False. Indicates whether or not to display message upon error
+  # errorMsgText  = Text to display in the body of the message box upon error (note: actual SQL will automatically be included, so no need to re-supply that)
+  # errorMsgTitle = Text to display in the title bar of the message box upon error
+  
+  if len(codeToRun) < 10:
+    MessageBox.Show("The supplied 'codeToRun' doesn't appear long enough, please check and update this code if necessary.\nPassed SQL: " + str(codeToRun), "ERROR: runSQL...")
+    return
+  
+  if codeToRun[:5] == "[SQL:":
+    fCodeToRun = codeToRun
+  else:
+    fCodeToRun = "[SQL: " + codeToRun + "]"
+  
+  try:
+    tmpValue = _tikitResolver.Resolve(fCodeToRun)
+    if apostropheHandle == 1:
+      tmpValue = tmpValue.replace("'", "''")
+    returnVal = str(tmpValue)
+    returnVal1 = 'N/A' if returnVal == None else returnVal
+  except:
+    if showError == True:
+      MessageBox.Show("{0}\n\nSQL used:\n{1}".format(errorMsgText, codeToRun), errorMsgTitle)
+    returnVal = ''
+    returnVal1 = "!Error"
+  
+  if showError:
+    msgBody = "runSQL(...):\n  CodeToRun: {0}\n  ShowError: {1}\n  ErrorMsgText: '{2}'\n  ErrorMsgTitle: '{3}'\n  > Result: {4}".format(fCodeToRun, showError, errorMsgText, errorMsgTitle, returnVal1)
+    MessageBox.Show(msgBody)
+  
+  return returnVal1
+
+# def runSQL(codeToRun, 
+#            showError=False, 
+#            errorMsgText="", 
+#            errorMsgTitle="", 
+#            apostropheHandle=0, 
+#            runInThread=False):
+#     """
+#     Runs SQL by calling _tikitResolver.Resolve in either the current
+#     thread or a separate .NET Thread (if runInThread=True).
+
+#     :param codeToRun: SQL code to run.
+#     :param showError: If True, show a message box on error.
+#     :param errorMsgText: Text for the error message box body.
+#     :param errorMsgTitle: Text for the error message box title.
+#     :param apostropheHandle: If 1, replace single quotes in the resolved result.
+#     :param runInThread: If True, runs the resolver on a separate .NET Thread (blocks until done).
+#     """
+#     # Quick length check
+#     if len(codeToRun) < 10:
+#         MessageBox.Show(
+#             "The supplied 'codeToRun' doesn't appear long enough, "
+#             "please check and update this code if necessary.\nPassed SQL: " + str(codeToRun),
+#             "ERROR: runSQL..."
+#         )
+#         return
+
+#     # Ensure we wrap the code if it is not already wrapped in [SQL: ...]
+#     if codeToRun.startswith("[SQL:"):
+#         fCodeToRun = codeToRun
+#     else:
+#         fCodeToRun = "[SQL: " + codeToRun + "]"
+
+#     def resolve_sql():
+#         """Encapsulates the call to _tikitResolver.Resolve(...) in a try/except block."""
+#         try:
+#             tmpValue = _tikitResolver.Resolve(fCodeToRun)
+#             if apostropheHandle == 1 and tmpValue is not None:
+#                 tmpValue = tmpValue.replace("'", "''")
+
+#             # Convert None -> 'N/A', else str(tmpValue)
+#             resolved = "N/A" if tmpValue is None else str(tmpValue)
+#             return resolved
+#         except Exception:
+#             if showError:
+#                 MessageBox.Show(
+#                     "{0}\n\nSQL used:\n{1}".format(errorMsgText, codeToRun), 
+#                     errorMsgTitle
+#                 )
+#             return "!Error"
+
+#     if runInThread:
+#         result_container = [None]  # store the result from worker
+
+#         def worker():
+#             result_container[0] = resolve_sql()
+
+#         # Create a .NET thread using ThreadStart
+#         thread = Thread(ThreadStart(worker))
+#         thread.Start()
+#         thread.Join()  # block until the thread finishes
+
+#         returnVal1 = result_container[0]
+#     else:
+#         # Run synchronously
+#         returnVal1 = resolve_sql()
+
+#     # Debug info
+#     if showError:
+#         msgBody=(
+#             "runSQL(...):\n"
+#             "  CodeToRun: {0}\n"
+#             "  ShowError: {1}\n"
+#             "  ErrorMsgText: '{2}'\n"
+#             "  ErrorMsgTitle: '{3}'\n"
+#             "  > Result: {4}"
+#         ).format(
+#             fCodeToRun, showError, errorMsgText, errorMsgTitle, returnVal1
+#         )
+#         MessageBox.Show(msgBody)
+#     return returnVal1
 
 ### Approval/access checks #############################################
 
@@ -60,59 +197,6 @@ def getUsersApproversEmail(forUser):
   #hodEmail = runSQL(hodEmailSQL, True, 'There was an error getting approval users email address...', 'DEBUGGING - getUsersApproversEmail')
   return hodEmail
 
-### Datagrid tools #############################################
-
-def OnPreviewKeyDown(s, event, key, *funcs, seventfuncs=None):
-  # The purpose of this utility is to bind functions to a key press event on the XAML form.
-  # The original use case was to bind the delete key to a function that would delete a 
-  # selected row from a datagrid.
-
-  if seventfuncs is None:
-      seventfuncs = []
-
-  if str(event.Key) == str(key):
-      for func in funcs:
-          # Check if this function should be called with (s, event)
-          if func in seventfuncs:
-              func(s, event)
-          else:
-              func()
-  return
-
-### SQL tools ####################################################
-
-def runSQL(codeToRun, showError = False, errorMsgText = "", errorMsgTitle = "", apostropheHandle = 0):
-  # This function is written to handle and check inputted SQL code, and will return the result of the SQL code.
-  # It first checks the length and wrapping of the code, then attempts to execute the SQL, it has an option apostrophe handler.
-  # codeToRun     = Full SQL of code to run. No need to wrap in '[SQL: code_Here]' as we can do that here
-  # showError     = True / False. Indicates whether or not to display message upon error
-  # errorMsgText  = Text to display in the body of the message box upon error (note: actual SQL will automatically be included, so no need to re-supply that)
-  # errorMsgTitle = Text to display in the title bar of the message box upon error
-  
-  if len(codeToRun) < 10:
-    MessageBox.Show("The supplied 'codeToRun' doesn't appear long enough, please check and update this code if necessary.\nPassed SQL: " + str(codeToRun), "ERROR: runSQL...")
-    return
-  
-  if codeToRun[:5] == "[SQL:":
-    fCodeToRun = codeToRun
-  else:
-    fCodeToRun = "[SQL: " + codeToRun + "]"
-  
-  try:
-    tmpValue = _tikitResolver.Resolve(fCodeToRun)
-    if apostropheHandle == 1:
-      tmpValue = tmpValue.replace("'", "''")
-    returnVal = str(tmpValue)
-    returnVal1 = 'N/A' if returnVal == None else returnVal
-  except:
-    if showError == True:
-      MessageBox.Show("{0}\n\nSQL used:\n{1}".format(errorMsgText, codeToRun), errorMsgTitle)
-    returnVal = ''
-    returnVal1 = "!Error"
-    
-  debugMessage(msgBody = "runSQL(...):\n  CodeToRun: {0}\n  ShowError: {1}\n  ErrorMsgText: '{2}'\n  ErrorMsgTitle: '{3}'\n  > Result: {4}".format(fCodeToRun, showError, errorMsgText, errorMsgTitle, returnVal1))
-  
-  return returnVal
 
 def getSQLDate(varDate):
   #Converts the passed varDate into SQL version date (YYYY-MM-DD)

@@ -24,8 +24,6 @@ from System.Windows.Data import Binding
 from System.Windows.Forms import SelectionMode, MessageBox, MessageBoxButtons, DialogResult
 from System.Windows.Input import KeyEventHandler
 from System.Windows.Media import Brush, Brushes
-import thread
-import time
 from TWUtils import *
 
  # TODO: Refactor main WIPReview datagrid, to match expected fields for the file closure tool
