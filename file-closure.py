@@ -579,6 +579,8 @@ def refresh_Matter_UnbilledTime(s, event):
   showFor = dg_TimeUsers.SelectedItem['Code']
   tmpCountRows = 0
 
+
+ # !BUG There is a bug here syntax error near ORDER
   time_SQL = """
   SELECT ToShowName, Code, TotalTime, ValOfTime 
   FROM (
@@ -607,7 +609,7 @@ def refresh_Matter_UnbilledTime(s, event):
       GROUP BY U.FullName, U.Code
   ) AS tmpT 
   ORDER BY mOrder
-  """.format(entity=myEntRef, matter=myMatNo)
+  """.format(entity=tmpEntity, matter=str(tmpMatter))
   if str(showFor) != 'x':
     time_SQL += "AND TT.Originator = '" + str(showFor) + "' "
   time_SQL += "ORDER BY TT.TransactionDate DESC"
