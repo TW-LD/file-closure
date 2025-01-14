@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <tfb>
-  <WIPReview>
+  <fileclosure>
     <Init>
       <![CDATA[
 import clr
@@ -24,7 +24,7 @@ from System.Windows.Data import Binding
 from System.Windows.Forms import SelectionMode, MessageBox, MessageBoxButtons, DialogResult
 from System.Windows.Input import KeyEventHandler
 from System.Windows.Media import Brush, Brushes
-from TWUtils.py import *
+from TWUtils import *
 
  # TODO: Remove all utility functions to the TWUtils file
  # TODO: Refactor main WIPReview datagrid, to match expected fields for the file closure tool
@@ -113,27 +113,28 @@ def refreshWIPReviewDataGrid(s, event):
     return
   
   # Form the SQL
-  wip_SQL = """SELECT  '0-OurRef' = E.ShortCode + '/' + CONVERT(varchar, M.Number), 
-   '1-Client Name' = E.Name, '2-Matter Description' = M.Description, 
-   '3-Client Monies' = M.Client_Ac_Balance, 
-   '4-Ring Fenced' = M.RingFencedClientBalance, 
-   '5-Office Balance' = M.Office_Ac_Balance, 
-   '6-Deposit Balance' = M.Depost_Ac_Balance, 
-   '7-Unbilled Disbs' = M.UnbilledDisbBalance, 
-   '8-Anticipated Disbs' = M.AnticipatedDisbsBalance, 
-   '9-Matter WIP' = (SELECT SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number), 
-   '10-Your WIP' = (SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number AND TT.FeeEarnerRef = M.FeeEarnerRef), 
-   '11-Created' = M.Created, 
-   '12-Last Bill Date' = CASE WHEN M.LastBillPostingDate IS NULL THEN 'Not billed yet' ELSE CONVERT(VARCHAR(12), M.LastBillPostingDate, 103) END, 
-   '13-Date of Last Time Entry' = (SELECT MAX(TT.DateStamp) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number), 
-   '14-Actions / Notes' = ISNULL(mWIP.FE_Notes, ''), 
-   '15-EntRef' = M.EntityRef, '16-MatNo' = M.Number, '17-LastUpdated' = mWIP.LastUpdated, 
-   '18-WriteOff_Req' = ISNULL(mWIP.WriteOff, ''), '19-WriteOff_HODStatus' = ISNULL(mWIP.WO_Approved_Status, ''), '20-WriteOffType' = mWIP.WriteOffType 
-   FROM Matters M "
-   LEFT OUTER JOIN Entities E ON M.EntityRef = E.Code 
-   LEFT OUTER JOIN Usr_AccWIP mWIP ON mWIP.EntityRef = M.EntityRef AND mWIP.MatterNo = M.Number 
-   WHERE M.FeeEarnerRef = '" + cbo_FeeEarner.SelectedItem['Code'] + "' 
-   AND (SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number) > 0 """
+  # Form the SQL
+  wip_SQL = "SELECT  '0-OurRef' = E.ShortCode + '/' + CONVERT(varchar, M.Number), "
+  wip_SQL += "'1-Client Name' = E.Name, '2-Matter Description' = M.Description, "
+  wip_SQL += "'3-Client Monies' = M.Client_Ac_Balance, "
+  wip_SQL += "'4-Ring Fenced' = M.RingFencedClientBalance, "
+  wip_SQL += "'5-Office Balance' = M.Office_Ac_Balance, "
+  wip_SQL += "'6-Deposit Balance' = M.Depost_Ac_Balance, "
+  wip_SQL += "'7-Unbilled Disbs' = M.UnbilledDisbBalance, "
+  wip_SQL += "'8-Anticipated Disbs' = M.AnticipatedDisbsBalance, "
+  wip_SQL += "'9-Matter WIP' = (SELECT SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number), "
+  wip_SQL += "'10-Your WIP' = (SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number AND TT.FeeEarnerRef = M.FeeEarnerRef), "
+  wip_SQL += "'11-Created' = M.Created, "
+  wip_SQL += "'12-Last Bill Date' = CASE WHEN M.LastBillPostingDate IS NULL THEN 'Not billed yet' ELSE CONVERT(VARCHAR(12), M.LastBillPostingDate, 103) END, "
+  wip_SQL += "'13-Date of Last Time Entry' = (SELECT MAX(TT.DateStamp) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number), "
+  wip_SQL += "'14-Actions / Notes' = ISNULL(mWIP.FE_Notes, ''), "
+  wip_SQL += "'15-EntRef' = M.EntityRef, '16-MatNo' = M.Number, '17-LastUpdated' = mWIP.LastUpdated, "
+  wip_SQL += "'18-WriteOff_Req' = ISNULL(mWIP.WriteOff, ''), '19-WriteOff_HODStatus' = ISNULL(mWIP.WO_Approved_Status, ''), '20-WriteOffType' = mWIP.WriteOffType "
+  wip_SQL += "FROM Matters M "
+  wip_SQL += "LEFT OUTER JOIN Entities E ON M.EntityRef = E.Code "
+  wip_SQL += "LEFT OUTER JOIN Usr_AccWIP mWIP ON mWIP.EntityRef = M.EntityRef AND mWIP.MatterNo = M.Number " 
+  wip_SQL += "WHERE M.FeeEarnerRef = '" + cbo_FeeEarner.SelectedItem['Code'] + "' "
+  wip_SQL += "AND (SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00) FROM TimeTransactions TT WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number) > 0 "
 
   if opt_OnlyShowWOComments.IsChecked == True:
     wip_SQL += "AND ISNULL(mWIP.FE_Notes, '') = '' "
@@ -1427,5 +1428,5 @@ lbl_OurRefCD = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_OurRefCD')
 myOnFormLoadEvent(_tikitSender, '')
 ]]>
     </Loaded>
-  </WIPReview>
+  </fileclosure>
 </tfb>
