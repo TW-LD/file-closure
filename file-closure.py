@@ -151,7 +151,6 @@ def refreshWIPReviewDataGrid(s, event):
 
   if opt_OnlyShowWOComments.IsChecked == True:
     wip_SQL += "AND ISNULL(mWIP.FE_Notes, '') = '' "
- 
   if cbo_SortBy.SelectedIndex == -1:
     wip_SQL += "ORDER BY [10-Your WIP] DESC"
   else:
