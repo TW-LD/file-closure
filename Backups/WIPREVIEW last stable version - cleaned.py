@@ -149,6 +149,8 @@ def refreshWIPReviewDataGrid(s, event):
       ) > 0
   """.format(fee_earner_code=cbo_FeeEarner.SelectedItem['Code'])
 
+  if opt_OnlyShowWOComments.IsChecked == True:
+    wip_SQL += "AND ISNULL(mWIP.FE_Notes, '') = '' "
   if cbo_SortBy.SelectedIndex == -1:
     wip_SQL += "ORDER BY [10-Your WIP] DESC"
   else:
@@ -259,6 +261,7 @@ def cellEdit_Finished(s, event):
       _tikitResolver.Resolve("[SQL: UPDATE Usr_AccWIPreply SET LastUpdated = '{0}' WHERE UserCode = '{1}']".format(newDate, _tikitUser))
 
   # just update the ticked counter
+  updated_TickedStatus(s, event)
   return
 
 
@@ -349,6 +352,18 @@ def setFE_toCurrentUser(s, event):
     cbo_SortBy.SelectedIndex = 5
   return
 
+
+def anythingTicked():
+  ticked = False
+
+  if dg_WIPReview.Items.Count > 0:
+    for row in dg_WIPReview.Items:
+      if row.iTemTicked == True:
+        if row.wClientName != '-No Data-':
+          ticked = True
+          break
+  return ticked
+
 def totalNoOfItems():
   tmpCount = 0
 
@@ -364,6 +379,36 @@ def totalTicked():
       tmpCount += 1
   return tmpCount
 
+def tickAllNone(s, event):
+# This function will activate upon clicking the 'Tick All/None' button (on the main datagrid)
+    global all_ticked
+    # if text of button is 'select none'  
+    if all_ticked:
+        # set 'all' variable to false and amend text on button to 'select all'
+        selectAll = False
+        all_ticked = False
+    else:
+        # set 'all' variable to true and amend text on button to 'select none'
+        selectAll = True
+        all_ticked = True
+    
+    # set new button text and call funtion to do the actual ticking/unticking
+    tick_all(selectAll)
+    updated_TickedStatus(s, event)
+    return
+
+def tick_all(tickAll):
+    """
+    Updates the 'iTemTicked'  in all rows to the provided status (True/False).
+    """
+    # Iterate over all items in the data grid
+    for item in dg_WIPReview.Items:
+        if hasattr(item, 'iTemTicked'):  # Check if the item has the 'iTemTicked' property
+            item.iTemTicked = tickAll  # Set the property to the desired value
+
+    # Refresh the data grid if necessary to update the UI
+    dg_WIPReview.Items.Refresh()
+    return
 
 
 def set_cboFE_Enabled(s, event):
@@ -379,6 +424,134 @@ def set_cboFE_Enabled(s, event):
   else:
     cbo_FeeEarner.IsEnabled = False
   return
+
+
+def updated_TickedStatus(s, event):
+  if anythingTicked() == False:  
+    txt_TickedStatus.Text = "0 of " + str(totalNoOfItems()) + " ticked"
+  else:
+    txt_TickedStatus.Text = str(totalTicked()) + " of " + str(totalNoOfItems()) + " ticked"
+  return
+
+
+def useNoteForTickedMatters(s, event):
+  countUpdated = 0
+  if dg_WIPReview.Items.Count == 0:
+    return
+
+  newDate = getSQLDate(_tikitResolver.Resolve("[SQL: SELECT GETDATE()]"))
+
+  for row in dg_WIPReview.Items:
+    if row.iTemTicked == True:
+      if row.wClientName != '-No Data-':
+        #MessageBox.Show('Will update note on matter ' + row.wOurRef)
+
+        tmpOurRef = row.wOurRef
+        tmpEntity = row.wEntRef
+        tmpMatter = row.wMatNo
+        tmpNote = row.wFENote
+        newNote = str(txt_Note.Text)
+        newNote = newNote.replace("'", "''")
+        tmpUpdateCode = ''
+
+        if len(tmpNote) > 0:
+          msg = "There is already a note for " + tmpOurRef + ":\n" + str(tmpNote) + "\n\nWould you like to overwrite this with:\n'" + newNote + "'?\n\nClicking no will just append the new note (cancel will ignore)"
+
+          myResult = MessageBox.Show(msg, 'Overwrite/Append/Ignore Existing note...', MessageBoxButtons.YesNoCancel)
+        else:
+          myResult = DialogResult.Yes
+
+        # get ID for current matter
+        countExistingRows = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_AccWIP WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
+        if int(countExistingRows) == 0:
+          # need to add row as one does not yet exist
+          _tikitResolver.Resolve("[SQL: INSERT INTO Usr_AccWIP (EntityRef, MatterNo, FE_Notes) VALUES ('{0}', {1}, '')]".format(tmpEntity, tmpMatter))
+
+        # get ID of row
+        IDtoUpdate = _tikitResolver.Resolve("[SQL: SELECT TOP(1) ID FROM Usr_AccWIP WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
+
+        if myResult == DialogResult.Yes:
+          # Code to Overwrite current note
+          tmpUpdateCode = "[SQL: UPDATE Usr_AccWIP SET FE_Notes = '{0}', LastUpdated = '{1}' WHERE ID = {2}]".format(newNote, newDate, IDtoUpdate)
+
+        elif myResult == DialogResult.No:
+          # code to APPEND new note to old note
+          fNote = tmpNote.replace("'", "''") + " - " + newNote
+          tmpUpdateCode = "[SQL: UPDATE Usr_AccWIP SET FE_Notes = '{0}', LastUpdated = '{1}' WHERE ID = {2}]".format(fNote, newDate, IDtoUpdate)
+
+        if len(tmpUpdateCode) > 0:
+          _tikitResolver.Resolve(tmpUpdateCode)
+          countUpdated += 1
+
+  # now to update main USER level table if we have updated anything
+  if countUpdated > 0:
+    countFEreply = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_AccWIPreply WHERE UserCode = '{0}']".format(_tikitUser))
+    if int(countFEreply) == 0:
+      _tikitResolver.Resolve("[SQL: INSERT INTO Usr_AccWIPreply (UserCode, LastUpdated) VALUES ('{0}', '{1}')]".format(_tikitUser, newDate))
+    else:
+      _tikitResolver.Resolve("[SQL: UPDATE Usr_AccWIPreply SET LastUpdated = '{0}' WHERE UserCode = '{1}']".format(newDate, _tikitUser))
+
+    refreshWIPReviewDataGrid(s, event) 
+  return
+
+
+def setAllTickedMattersToWriteOff(s, event):
+  # This is the 'Bulk' button to mark all ticked items as 'write-off'...
+  countUpdated = 0
+  global UserIsHOD
+  # firstly, determine if user is a HOD (if they are, the following should return '1', else '0' is returned)
+  
+  if dg_WIPReview.Items.Count == 0:
+    #MessageBox.Show("", "")
+    return
+
+  newDate = getSQLDate(_tikitResolver.Resolve("[SQL: SELECT GETDATE()]"))
+
+  for row in dg_WIPReview.Items:
+    if row.iTemTicked == True:
+      if row.wClientName != '-No Data-':
+        #MessageBox.Show('Will update note on matter ' + row.wOurRef)
+
+        tmpOurRef = row.wOurRef
+        tmpEntity = row.wEntRef
+        tmpMatter = row.wMatNo
+        tmpNote = row.wFENote
+        newNote = str(txt_Note.Text)
+        tmpUpdateCode = ''
+
+        # get ID for current matter
+        countExistingRows = runSQL("SELECT COUNT(ID) FROM Usr_AccWIP WHERE EntityRef = '{0}' AND MatterNo = {1}".format(tmpEntity, tmpMatter), False, '', '' )
+        if int(countExistingRows) == 0:
+          # need to add row as one does not yet exist
+          runSQL("INSERT INTO Usr_AccWIP (EntityRef, MatterNo, FE_Notes, WriteOff) VALUES ('{0}', {1}, '', 'N')".format(tmpEntity, tmpMatter), False, '', '')
+
+        # get ID of row
+        IDtoUpdate = runSQL("SELECT TOP(1) ID FROM Usr_AccWIP WHERE EntityRef = '{0}' AND MatterNo = {1}".format(tmpEntity, tmpMatter), False, '', '')
+
+        # Code to Overwrite current note
+        #tmpUpdateCode = "UPDATE Usr_AccWIP SET WriteOffType = 'Full WriteOff', LastUpdated = '{0}".format(newDate)
+        tmpUpdateCode = "UPDATE Usr_AccWIP SET WriteOffType = 'Full WriteOff', LastUpdated = GETDATE() "
+
+        # if the current user is actually a HOD, then we also set the HOD WO Status to 'Approved', and set the 'BatchID'
+        if UserIsHOD == True:
+          tmpBatchID = runSQL("SELECT U.FullName + '-' + CONVERT(nvarchar, (SELECT ISNULL(COUNT(sHOD.ID), 0) + 1 FROM Usr_WIP_Review_Subs_HOD sHOD WHERE U.Code = sHOD.UserCode)) FROM Users U WHERE U.Code = '{0}'".format(_tikitUser), False, '', '')
+          tmpUpdateCode += ", BatchID = '{0}', WO_Approved_Status = 'Approved', Date_WO_Approved = GETDATE() ".format(tmpBatchID)
+
+        tmpUpdateCode += "WHERE ID = {0}".format(IDtoUpdate) 
+        runSQL(tmpUpdateCode, False, '', '')
+        countUpdated += 1
+
+  # now to update main USER level table if we have updated anything
+  if countUpdated > 0:
+    countFEreply = runSQL("SELECT COUNT(ID) FROM Usr_AccWIPreply WHERE UserCode = '{0}'".format(_tikitUser), False, '', '')
+    if int(countFEreply) == 0:
+      runSQL("INSERT INTO Usr_AccWIPreply (UserCode, LastUpdated) VALUES ('{0}', '{1}')".format(_tikitUser, newDate), False, '', '')
+    else:
+      runSQL("UPDATE Usr_AccWIPreply SET LastUpdated = '{0}' WHERE UserCode = '{1}'".format(newDate, _tikitUser), False, '', '')
+
+    refreshWIPReviewDataGrid(s, event)   
+  return
+
 
 # # # # # # # # #   T I M E   B R E A K D O W N   # # # # # # # # # # 
 class matterTime(object):
@@ -405,14 +578,14 @@ def refresh_Matter_UnbilledTime(s, event):
   showFor = dg_TimeUsers.SelectedItem['Code']
   tmpCountRows = 0
 
-  time_SQL = """SELECT '0-Transaction Date' = TT.TransactionDate, '1-Quantity Of Time' = TT.QuantityOfTime / 60,
-  '2-Value Of Time' = TT.ValueOfTime - TT.TimeValueBilled, '3-Activity Type' = ActT.Description,
-  '4-Narrative' = TT.Narratives + TT.Narrative2 + TT.Narrative3,
-  '5-Originator' = (SELECT FullName FROM Users U WHERE U.Code = TT.Originator)
-  FROM TimeTransactions TT, ActivityTypes ActT
-  WHERE TT.ActivityCodeRef = ActT.Code AND ActT.ChargeType = 'C' AND TT.TransactionType LIKE '%Time'
-  AND TT.EntityRef = '{entity}' AND 
-  TT.MatterNoRef = {matter} AND TT.ValueOfTime - TT.TimeValueBilled > 0 """.format(entity=tmpEntity, matter=tmpMatter)
+  time_SQL = """SELECT '0-Transaction Date' = TT.TransactionDate, '1-Quantity Of Time' = TT.QuantityOfTime / 60, "
+  '2-Value Of Time' = TT.ValueOfTime - TT.TimeValueBilled, '3-Activity Type' = ActT.Description, "
+  '4-Narrative' = TT.Narratives + TT.Narrative2 + TT.Narrative3, "
+  '5-Originator' = (SELECT FullName FROM Users U WHERE U.Code = TT.Originator) "
+  FROM TimeTransactions TT, ActivityTypes ActT "
+  WHERE TT.ActivityCodeRef = ActT.Code AND ActT.ChargeType = 'C' AND TT.TransactionType LIKE '%Time' "
+  AND TT.EntityRef = '" + tmpEntity + "' AND 
+  TT.MatterNoRef = " + str(tmpMatter) + " AND TT.ValueOfTime - TT.TimeValueBilled > 0 """.format(entity=tmpEntity, matter=tmpMatter)
   if str(showFor) != 'x':
     time_SQL += "AND TT.Originator = '" + str(showFor) + "' "
   time_SQL += "ORDER BY TT.TransactionDate DESC"
@@ -647,10 +820,13 @@ def update_Details_Datagrids(s, event):
     refresh_Matter_UnbilledDisbs(s, event)
     refresh_Matter_UnpaidBills(s, event)
     refresh_dgClientLedger(s, event)
+    #MessageBox.Show("Loading Case Documents", "Debugging")
+    # removed Case Docs refresh from here as was causing an out of memory issue
   else:
     grp_WIPReview.Visibility = Visibility.Hidden
     dg_WIPReview.Height = 790
     
+  updated_TickedStatus(s, event)
   return
 
 class timeUsers(object):
@@ -976,6 +1152,7 @@ def myOnFormLoadEvent(s, event):
   setFE_toCurrentUser(s, event)
   set_cboFE_Enabled(s, event)
   refreshWIPReviewDataGrid(s, event)
+  updated_TickedStatus(s, event)
   update_Details_Datagrids(s, event)
   # determine if user is can Approve their own 'write-offs' (if they can, the following should return True, else False is returned)
   global UserIsHOD
@@ -1142,7 +1319,8 @@ def POPULATE_AGENDA_NAMES(s, event):
       Cm_CaseItems.Description
   """.format(
       entity_ref=dg_WIPReview.SelectedItem['EntityRef'], 
-      matter_no=dg_WIPReview.SelectedItem['MatterNo'])
+      matter_no=dg_WIPReview.SelectedItem['MatterNo']
+)
 
   _tikitDbAccess.Open(mySQL)
   itemA = []
@@ -1175,6 +1353,28 @@ def caseDocsPanel_refresh(s, event):
 
 # #  END: C A S E   D O C S   -   F U N C T I O N S  # #
 
+
+def clearSentToAccountsStatus(s, event):
+  # This function clears the "Sent to Accounts" status for selected rows in the DataGrid
+
+  # Loop through each row in the DataGrid
+  for row in dg_WIPReview.Items:
+    # Check if the row is selected using the tick column (assuming it's a boolean value)
+    if row.iTemTicked:
+      # Check if the "Sent to Accounts" status needs to be cleared
+      if row.wHODwoStatus == 'Sent to Accounts':
+        # Create the SQL query to clear the status in the database
+        clearSQL = ("[SQL: UPDATE Usr_AccWIP SET WO_Approved_Status = NULL, Date_WO_Approval_Sent = NULL WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(row.wEntRef, row.wMatNo))
+
+        # Execute the SQL query
+        _tikitResolver.Resolve(clearSQL)
+
+  # Refresh the DataGrid after clearing the statuses
+  refreshWIPReviewDataGrid(s, event)
+  MessageBox.Show("The 'Sent to Accounts' status has been cleared for all selected items.", "Status Cleared")
+  return
+  
+
 ]]>
     </Init>
     <Loaded>
@@ -1195,11 +1395,31 @@ cbo_SortBy.SelectionChanged += refreshWIPReviewDataGrid
 chk_ViewDetails = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'chk_ViewDetails')
 chk_ViewDetails.Click += update_Details_Datagrids
 
+opt_OnlyShowWOComments = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'opt_OnlyShowWOComments')
+opt_OnlyShowWOComments.Click += refreshWIPReviewDataGrid
+opt_ShowAllMatters = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'opt_ShowAllMatters')
+opt_ShowAllMatters.Click += refreshWIPReviewDataGrid
+
+
+
 # Bulk update area
+txt_TickedStatus = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'txt_TickedStatus')
+txt_Note = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'txt_Note')
+btn_CopyNoteToTickedMatters = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_CopyNoteToTickedMatters')
+btn_CopyNoteToTickedMatters.Click += useNoteForTickedMatters
+
+btn_BulkWriteOff = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_BulkWriteOff')
+btn_BulkWriteOff.Click += setAllTickedMattersToWriteOff
+
+btn_ClearSentToAccounts = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_ClearSentToAccounts')
+btn_ClearSentToAccounts.Click += clearSentToAccountsStatus
+
 lbl_LastSubmittedDate = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_LastSubmittedDate')
 btn_Submit = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_Submit')
 btn_Submit.Click += btn_Submit_Clicked
 
+btn_tick_all = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_tick_all')
+btn_tick_all.Click += tickAllNone
 # following is the textblock residing inside the 'Submit' button as we need text to wrap, and to change according to users 'canApproveOwn'
 tb_SubmitButton = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'tb_SubmitButton')
 
