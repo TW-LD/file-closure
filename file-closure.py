@@ -579,37 +579,14 @@ def refresh_Matter_UnbilledTime(s, event):
   showFor = dg_TimeUsers.SelectedItem['Code']
   tmpCountRows = 0
 
-
- # !BUG There is a bug here syntax error near ORDER
-  time_SQL = """
-  SELECT ToShowName, Code, TotalTime, ValOfTime 
-  FROM (
-      SELECT 'ToShowName' = 'SHOW ALL TIME', 
-            'Code' = 'x', 
-            'TotalTime' = SUM(TT.QuantityOfTime) / 60, 
-            'ValOfTime' = ISNULL(SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled), 0.00), 
-            'mOrder' = 0 
-      FROM TimeTransactions TT 
-      WHERE TT.EntityRef = '{entity}' 
-        AND TT.MatterNoRef = {matter} 
-        AND TT.ValueOfTime - TT.TimeValueBilled > 0
-
-      UNION 
-
-      SELECT 'ToShowName' = U.FullName, 
-            'Code' = U.Code, 
-            'TotalTime' = SUM(TT.QuantityOfTime) / 60, 
-            'ValOfTime' = ISNULL(SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled), 0.00), 
-            'mOrder' = 2 
-      FROM TimeTransactions TT 
-      JOIN Users U ON TT.Originator = U.Code 
-      WHERE TT.EntityRef = '{entity}' 
-        AND TT.MatterNoRef = {matter} 
-        AND TT.ValueOfTime - TT.TimeValueBilled > 0 
-      GROUP BY U.FullName, U.Code
-  ) AS tmpT 
-  ORDER BY mOrder
-  """.format(entity=tmpEntity, matter=str(tmpMatter))
+  time_SQL = """SELECT '0-Transaction Date' = TT.TransactionDate, '1-Quantity Of Time' = TT.QuantityOfTime / 60, "
+  '2-Value Of Time' = TT.ValueOfTime - TT.TimeValueBilled, '3-Activity Type' = ActT.Description, "
+  '4-Narrative' = TT.Narratives + TT.Narrative2 + TT.Narrative3, "
+  '5-Originator' = (SELECT FullName FROM Users U WHERE U.Code = TT.Originator) "
+  FROM TimeTransactions TT, ActivityTypes ActT "
+  WHERE TT.ActivityCodeRef = ActT.Code AND ActT.ChargeType = 'C' AND TT.TransactionType LIKE '%Time' "
+  AND TT.EntityRef = '" + tmpEntity + "' AND 
+  TT.MatterNoRef = " + str(tmpMatter) + " AND TT.ValueOfTime - TT.TimeValueBilled > 0 """.format(entity=tmpEntity, matter=tmpMatter)
   if str(showFor) != 'x':
     time_SQL += "AND TT.Originator = '" + str(showFor) + "' "
   time_SQL += "ORDER BY TT.TransactionDate DESC"
