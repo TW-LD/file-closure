@@ -35,169 +35,100 @@ all_ticked = False
 
 ## Main WIP Review DataGrid
 class WIPreview(object):
-  def __init__(self, myTicked, myRef, myClient, myMatDesc, myClientMoney, myRingFence, myOffBalance, myDepBalance, myUnbilledDisbs, myAntDisbs, myWIP, 
-               myFEwip, myCreated, myLastBillDate, myLastTimeEntry, myFENote, myEntRef, myMatNo, myLastUpdated, myReqWO, myHODwoStatus, myWOType):
-
-    self.iTemTicked = myTicked
-    self.wOurRef = myRef
-    self.wLastUpdated = myLastUpdated
-    self.wClientName = myClient
-    self.wMatDesc = myMatDesc
-    self.wClientMonies = myClientMoney
-    self.wRingFenced = myRingFence
-    self.wOffBal = myOffBalance
-    self.wDepBal = myDepBalance
-    self.wUnbilledDisbs = myUnbilledDisbs
-    self.wAntDisbs = myAntDisbs
-
-    self.wWIP = myWIP
-    self.wFEWIP = myFEwip
-    self.wMatCreated = myCreated
-    self.wLastBillDate = myLastBillDate
-    self.wLastTimeEntry = myLastTimeEntry
-    self.wFENote = myFENote
-    self.wEntRef = myEntRef
-    self.wMatNo = myMatNo
-
-    self.wReqWO = True if myReqWO == 'Y' else False
-    self.wHODwoStatus = myHODwoStatus
-    self.wWOType = myWOType
-    self.wWOTypeItems = ["Full WriteOff", "Partial WriteOff", "(clear)"]
-    return
-
-  def __getitem__(self, index):
-  
-    if index == 'EntityRef': 
-      return self.wEntRef
-    elif index == 'MatterNo': 
-      return self.wMatNo
-    elif index == 'TickedStatus':
-      return self.iTemTicked
-    elif index == 'OurRef':
-      return self.wOurRef
-    elif index == 'MatDesc':
-      return self.wMatDesc
-    elif index == 'FENote':
-      return self.wFENote
-    elif index == 'NoteLastUpdated':
-      return self.wLastUpdated
-    elif index == 'WO_Requested':
-      if self.wReqWO == True:
-        return 'Y'
-      else:
-        return 'N'
-    elif index == 'WOType':
-      return self.wWOType
+    def __init__(self, myTicked, myRef, myClient, myMatDesc, myEntRef, myMatNo, myFENote):
+        self.iTemTicked  = myTicked
+        self.wOurRef     = myRef
+        self.wClientName = myClient
+        self.wMatDesc    = myMatDesc
+        self.wEntRef     = myEntRef
+        self.wMatNo      = myMatNo
+        self.wFENote     = myFENote
+        return
+    
+    def __getitem__(self, index):
+        if index == 'EntityRef':
+            return self.wEntRef
+        elif index == 'MatterNo':
+            return self.wMatNo
+        elif index == 'TickedStatus':
+            return self.iTemTicked
+        elif index == 'OurRef':
+            return self.wOurRef
+        elif index == 'MatDesc':
+            return self.wMatDesc
+        elif index == 'FENote':           
+            return self.wFENote
+        return None
 
 
 def refreshWIPReviewDataGrid(s, event):
   if cbo_FeeEarner.SelectedIndex == -1:
     MessageBox.Show("No items to show as a Fee Earner hasn't been selected from the drop-down.\n\nPlease note that only the Accounts department are able to select a different Fee Earner", "Refresh WIP Review List...")
     return
-  
-  # Form the SQL
+
+  # TODO: We need to redo the SQL below to grab the following fields: Our ref, Client Name, Matter Description, Time inactive, Archiving issues.
+
+  # TODO: Need to add a table and SQL grab for fee earner notes for archiving.
+
   wip_SQL = """
-  SELECT  
-      '0-OurRef' = E.ShortCode + '/' + CONVERT(varchar, M.Number), 
-      '1-Client Name' = E.Name, 
-      '2-Matter Description' = M.Description, 
-      '3-Client Monies' = M.Client_Ac_Balance, 
-      '4-Ring Fenced' = M.RingFencedClientBalance, 
-      '5-Office Balance' = M.Office_Ac_Balance, 
-      '6-Deposit Balance' = M.Depost_Ac_Balance, 
-      '7-Unbilled Disbs' = M.UnbilledDisbBalance, 
-      '8-Anticipated Disbs' = M.AnticipatedDisbsBalance, 
-      '9-Matter WIP' = (
-          SELECT SUM(TT.ValueOfTime) - SUM(TT.TimeValueBilled) 
-          FROM TimeTransactions TT 
-          WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number
-      ), 
-      '10-Your WIP' = (
-          SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00) 
-          FROM TimeTransactions TT 
-          WHERE TT.EntityRef = M.EntityRef 
-            AND TT.MatterNoRef = M.Number 
-            AND TT.FeeEarnerRef = M.FeeEarnerRef
-      ), 
-      '11-Created' = M.Created, 
-      '12-Last Bill Date' = CASE 
-          WHEN M.LastBillPostingDate IS NULL THEN 'Not billed yet' 
-          ELSE CONVERT(VARCHAR(12), M.LastBillPostingDate, 103) 
-      END, 
-      '13-Date of Last Time Entry' = (
-          SELECT MAX(TT.DateStamp) 
-          FROM TimeTransactions TT 
-          WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number
-      ), 
-      '14-Actions / Notes' = ISNULL(mWIP.FE_Notes, ''), 
-      '15-EntRef' = M.EntityRef, 
-      '16-MatNo' = M.Number, 
-      '17-LastUpdated' = mWIP.LastUpdated, 
-      '18-WriteOff_Req' = ISNULL(mWIP.WriteOff, ''), 
-      '19-WriteOff_HODStatus' = ISNULL(mWIP.WO_Approved_Status, ''), 
-      '20-WriteOffType' = mWIP.WriteOffType
-  FROM 
-      Matters M
-      LEFT OUTER JOIN Entities E ON M.EntityRef = E.Code
-      LEFT OUTER JOIN Usr_AccWIP mWIP ON mWIP.EntityRef = M.EntityRef AND mWIP.MatterNo = M.Number
-  WHERE 
-      M.FeeEarnerRef = '{fee_earner_code}'
-      AND (
-          SELECT ISNULL(SUM(TT.ValueOfTime), 0.00) - ISNULL(SUM(TT.TimeValueBilled), 0.00)
-          FROM TimeTransactions TT
-          WHERE TT.EntityRef = M.EntityRef AND TT.MatterNoRef = M.Number
-      ) > 0
-  """.format(fee_earner_code=cbo_FeeEarner.SelectedItem['Code'])
+      SELECT
+          '0-OurRef'      = E.ShortCode + '/' + CONVERT(varchar, M.Number),
+          '1-Client Name' = E.Name,
+          '2-Matter Desc' = M.Description,
+          '3-EntRef'      = M.EntityRef,
+          '4-MatNo'       = M.Number
+      FROM
+          Matters M
+          LEFT OUTER JOIN Entities E
+              ON M.EntityRef = E.Code
+      WHERE
+          M.FeeEarnerRef = '{0}'
+  """.format(cbo_FeeEarner.SelectedItem['Code'])
 
-  if cbo_SortBy.SelectedIndex == -1:
-    wip_SQL += "ORDER BY [10-Your WIP] DESC"
-  else:
-    wip_SQL += "ORDER BY " + cbo_SortBy.SelectedItem['SQLCode']
-
-
-  # Open and store items in code
   _tikitDbAccess.Open(wip_SQL)
   mItem = []
-  
-  if _tikitDbAccess._dr is not None:
-    dr = _tikitDbAccess._dr
-    if dr.HasRows:
-      while dr.Read():
-        iTicked = False
-        iRef = '' if dr.IsDBNull(0) else dr.GetString(0)  
-        iClient = '' if dr.IsDBNull(1) else dr.GetString(1)
-        iMatDesc = '' if dr.IsDBNull(2) else dr.GetString(2)
-        iClientMoney = 0 if dr.IsDBNull(3) else dr.GetValue(3)
-        iRingFence = 0 if dr.IsDBNull(4) else dr.GetValue(4)
-        iOffBalance = 0 if dr.IsDBNull(5) else dr.GetValue(5)
-        iDepBalance = 0 if dr.IsDBNull(6) else dr.GetValue(6)
-        iUnbilledDisbs = 0 if dr.IsDBNull(7) else dr.GetValue(7)
-        iAntDisbs = 0 if dr.IsDBNull(8) else dr.GetValue(8)
-        iWIP = 0 if dr.IsDBNull(9) else dr.GetValue(9)
-        iFEwip = 0 if dr.IsDBNull(10) else dr.GetValue(10)
-        iCreated = '' if dr.IsDBNull(11) else dr.GetValue(11)
-        iLastBillDate = '' if dr.IsDBNull(12) else dr.GetString(12)
-        iLastTimeEntry = '' if dr.IsDBNull(13) else dr.GetValue(13)
-        iFENote = '' if dr.IsDBNull(14) else dr.GetString(14)
-        iEntRef = '' if dr.IsDBNull(15) else dr.GetString(15)
-        iMatNo = 0 if dr.IsDBNull(16) else dr.GetValue(16)
-        iLUpdate = '' if dr.IsDBNull(17) else dr.GetValue(17)
-        iWOreq = 'N' if dr.IsDBNull(18) else dr.GetString(18)
-        iWOHODStatus = '' if dr.IsDBNull(19) else dr.GetString(19)
-        iWOType = '' if dr.IsDBNull(20) else dr.GetString(20)
 
-        mItem.append(WIPreview(iTicked, iRef, iClient, iMatDesc, iClientMoney, iRingFence, iOffBalance, iDepBalance, iUnbilledDisbs, iAntDisbs, iWIP, iFEwip, iCreated, iLastBillDate, iLastTimeEntry, iFENote, iEntRef, iMatNo, iLUpdate, iWOreq, iWOHODStatus, iWOType))
-    else:
-      mItem.append(WIPreview(False, "-N/A-", '-No Data-', '-No Data-', 0, 0, 0, 0, 0, 0, 0, 0, '', '', '', '', '', '', '', 'N', '', ''))
-    dr.Close()
+  if _tikitDbAccess._dr is not None:
+      dr = _tikitDbAccess._dr
+      if dr.HasRows:
+          while dr.Read():
+              iTicked  = False
+              iRef     = '' if dr.IsDBNull(0) else dr.GetString(0)  # 0-OurRef
+              iClient  = '' if dr.IsDBNull(1) else dr.GetString(1)  # 1-Client Name
+              iMatDesc = '' if dr.IsDBNull(2) else dr.GetString(2)  # 2-Matter Desc
+              iEntRef  = '' if dr.IsDBNull(3) else dr.GetString(3)  # 3-EntRef
+              iMatNo   = 0  if dr.IsDBNull(4) else dr.GetValue(4)   # 4-MatNo
+
+              wip_item = WIPreview(
+                  iTicked,
+                  iRef,
+                  iClient,
+                  iMatDesc,
+                  iEntRef,
+                  iMatNo,
+                  "hello"
+              )
+              mItem.append(wip_item)
+      else:
+          mItem.append(
+              WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0)
+          )
+      dr.Close()
   else:
-    mItem.append(WIPreview(False, "-N/A-", '-No Data-', '-No Data-', 0, 0, 0, 0, 0, 0, 0, 0, '', '', '', '', '', '', '', 'N', '', ''))
-    
+      mItem.append(
+          WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0)
+      )
+
   _tikitDbAccess.Close
 
-  # Set 'Source' and close db connection
   dg_WIPReview.ItemsSource = mItem
-  lbl_LastSubmittedDate.Content = _tikitResolver.Resolve("[SQL: SELECT ISNULL(CONVERT(NVARCHAR, MAX(Date_of_Submission), 103), 'Never') FROM Usr_WIP_Review_Submissions WHERE UserCode = '{0}']".format(cbo_FeeEarner.SelectedItem['Code']))
+
+  lbl_LastSubmittedDate.Content = _tikitResolver.Resolve(
+      "[SQL: SELECT ISNULL(CONVERT(NVARCHAR, MAX(Date_of_Submission), 103), 'Never') "
+      "FROM Usr_WIP_Review_Submissions "
+      "WHERE UserCode = '{0}']".format(cbo_FeeEarner.SelectedItem['Code'])
+  )
+
   return
 
 
@@ -210,13 +141,10 @@ def cellEdit_Finished(s, event):
   tmpEntity = dg_WIPReview.SelectedItem['EntityRef']
   tmpMatter = dg_WIPReview.SelectedItem['MatterNo']
   tmpNote = str(dg_WIPReview.SelectedItem['FENote'])
-  #tmpWO_Req = dg_WIPReview.SelectedItem['WO_Requested']
-  tmpWO_Type = dg_WIPReview.SelectedItem['WOType']
   updateSQL = 'UPDATE Usr_AccWIP SET '
   countToUpdate = 0
   global UserIsHOD
 
-  #MessageBox.Show('Column Name: ' + tmpColName + '\nIDtoUpdate: ' + str(IDtoUpdate))
   # count if there are any rows in Usr_AccWIP and if zero, add a new row with default data
   countExistingRows = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_AccWIP WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
   if int(countExistingRows) == 0:
@@ -226,26 +154,10 @@ def cellEdit_Finished(s, event):
   IDtoUpdate = _tikitResolver.Resolve("[SQL: SELECT ID FROM Usr_AccWIP WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
 
   # if name of column is 'WIP Review Notes'
-  if tmpColName == 'WIP Review Notes':
+  if tmpColName == 'Archiving Notes':
     if str(dg_WIPReview.SelectedItem['FENote']) != lbl_tmpNote.Content:
       updateSQL += "FE_Notes = '{0}', LastUpdated = '{1}' ".format(tmpNote.replace("'","''"), newDate)
       countToUpdate += 1
-  
-  if tmpColName == 'Write-Off Type':
-    if tmpWO_Type == '(clear)':
-      updateSQL += "WriteOffType = null " 
-      countToUpdate += 1
-    else:
-      updateSQL += "WriteOffType = '{0}' ".format(tmpWO_Type)
-      countToUpdate += 1
-
-    # if the current user is actually a HOD, then we also set the HOD WO Status to 'Approved', and set the 'BatchID'
-    if UserIsHOD == True:
-      if tmpWO_Type in ("Full WriteOff", "Partial WriteOff"):
-        tmpBatchID = _tikitResolver.Resolve("[SQL: SELECT U.FullName + '-' + CONVERT(nvarchar, (SELECT ISNULL(COUNT(sHOD.ID), 0) + 1 FROM Usr_WIP_Review_Subs_HOD sHOD WHERE U.Code = sHOD.UserCode)) FROM Users U WHERE U.Code = '{0}']".format(_tikitUser))
-        updateSQL += ", BatchID = '{0}', WO_Approved_Status = 'Approved', Date_WO_Approved = GETDATE() ".format(tmpBatchID)
-      else:
-        updateSQL += ", BatchID = null, WO_Approved_Status = null, Date_WO_Approved = null "
 
   if countToUpdate > 0:
     #Add Where
@@ -277,25 +189,13 @@ class SortByList(object):
     elif index == 'SQLCode':
       return self.SQLCode
 
-def populate_SortByList(s, event): 
+def populate_SortByList(s, event):
   myItems = []
   
   myItems.append(SortByList(0, 'Our Ref', '[0-OurRef]'))
   myItems.append(SortByList(1, 'Our Ref Descending', '[0-OurRef] DESC'))
-  myItems.append(SortByList(2, 'Matter WIP', '[9-Matter WIP]'))
-  myItems.append(SortByList(3, 'Matter WIP Descending', '[9-Matter WIP] DESC'))
-  myItems.append(SortByList(4, 'Your WIP', '[10-Your WIP]'))
-  myItems.append(SortByList(5, 'Your WIP Descending', '[10-Your WIP] DESC'))
-  myItems.append(SortByList(6, 'Created', '11-Created'))
-  myItems.append(SortByList(7, 'Created Descending', '11-Created DESC'))
-  myItems.append(SortByList(8, 'Last Time Entry', '[13-Date of Last Time Entry]'))
-  myItems.append(SortByList(9, 'Last Time Entry Descending', '[13-Date of Last Time Entry] DESC'))
-  myItems.append(SortByList(10, 'FE Notes', '[14-Actions / Notes]'))
-  myItems.append(SortByList(11, 'FE Notes Descending', '[14-Actions / Notes] DESC'))
-  
   cbo_SortBy.ItemsSource = myItems
   return
-
 
 class UsersList(object):
   def __init__(self, myFECode, myFEName):
@@ -393,7 +293,7 @@ class matterTime(object):
 
 
 def refresh_Matter_UnbilledTime(s, event):
-
+  MessageBox.Show("Error 2")
   if dg_WIPReview.SelectedIndex == -1:
     ti_UnbilledTime.Header = 'WIP (Unbilled Time) - No data'
     return
@@ -426,7 +326,7 @@ def refresh_Matter_UnbilledTime(s, event):
     if dr.HasRows:
       while dr.Read():
         iTDate = 0 if dr.IsDBNull(0) else dr.GetValue(0)  
-        iQtyTime = 0 if dr.IsDBNull(1) else dr.GetValue(1)
+        iQtyTime = 0 if dr.IsDBNull(1) else dr.GetDecimal(1)
         iValTime = 0 if dr.IsDBNull(2) else dr.GetValue(2)
         iActType = '' if dr.IsDBNull(3) else dr.GetString(3)
         iNarr = '' if dr.IsDBNull(4) else dr.GetString(4)
@@ -464,7 +364,7 @@ class matterDisbs(object):
     return
 
 def refresh_Matter_UnbilledDisbs(s, event):
-
+  MessageBox.Show("Error 3")
   if dg_WIPReview.SelectedIndex == -1:
     ti_UnbilledDisbs.Header = 'Unbilled Disbursements - No data'
     lbl_NO_DISBS.Visibility = Visibility.Visible
@@ -555,7 +455,7 @@ class matterBills(object):
     return
 
 def refresh_Matter_UnpaidBills(s, event):
-
+  MessageBox.Show("Error 4")
   if dg_WIPReview.SelectedIndex == -1:
     ti_UnpaidBills.Header = "Unpaid Bills - No data"
     lbl_NO_BILLS.Visibility = Visibility.Visible
@@ -632,8 +532,6 @@ def update_Details_Datagrids(s, event):
       grp_WIPReview.Header = 'Details for selected matter: (NO MATTER CURRENTLY SELECTED)'
   else:
     lbl_tmpNote.Content = dg_WIPReview.SelectedItem['FENote']
-    lbl_tmpWOReq.Content = dg_WIPReview.SelectedItem['WO_Requested']
-    lbl_tmpWOtype.Content = dg_WIPReview.SelectedItem['WOType']
     if chk_ViewDetails.IsChecked == True:
       grp_WIPReview.Header = 'Details for selected matter: ' + dg_WIPReview.SelectedItem['OurRef'] + ' - ' + dg_WIPReview.SelectedItem['MatDesc'] + ' '
     dg_WIPReview.BeginEdit()
@@ -642,6 +540,7 @@ def update_Details_Datagrids(s, event):
     # update other datagrids and not fogetting to update the ticked status
     dg_WIPReview.Height = 431
     grp_WIPReview.Visibility = Visibility.Visible
+    MessageBox.Show("Error 1")
     populate_TimeUsersToShow(s, event)
     refresh_Matter_UnbilledTime(s, event)
     refresh_Matter_UnbilledDisbs(s, event)
@@ -676,6 +575,7 @@ class timeUsers(object):
       return self.wipTvalueOfTime
 
 def populate_TimeUsersToShow(s, event):
+  MessageBox.Show("Error 2")
   if dg_WIPReview.SelectedIndex == -1:
     return
 
@@ -729,6 +629,7 @@ def populate_TimeUsersToShow(s, event):
         iTotalTime = '' if dr.IsDBNull(2) else dr.GetValue(2)
         iValOfTime = '' if dr.IsDBNull(3) else dr.GetValue(3)  
         nTotalTime = getTextualTime(iTotalTime)
+
         nValOfTime = '{:,.2f}'.format(iValOfTime)
         
         myItem.append(timeUsers(iTick, iToShow, iCode, nTotalTime, nValOfTime))
@@ -739,88 +640,6 @@ def populate_TimeUsersToShow(s, event):
   # Set 'Source' and close db connection
   dg_TimeUsers.ItemsSource = myItem
   return
-
-
-def btn_Submit_Clicked(s, event):
-  # If the Fee Earner IS the HOD, then we need to bypass sending to HOD for Approval
-  global UserIsHOD
-
-  if UserIsHOD == True:
-    msgTitle = "Send WIP Write-Off to Accounts..."
-    tmpMsg = "Are you sure you want to send your WIP Write-Offs directly to the Accounts department now?\n\nThis will only email those matters you have marked as 'Full WriteOff' or 'Partial WriteOff' against"
-    tmpResult = MessageBox.Show(tmpMsg, msgTitle, MessageBoxButtons.YesNo)
-
-    if tmpResult == DialogResult.No:
-      return
-
-    # current user is a HOD, so submit direct to Accounts
-    tmpBatchID = _tikitResolver.Resolve("[SQL: SELECT U.FullName + '-' + CONVERT(nvarchar, (SELECT ISNULL(COUNT(sHOD.ID), 0) + 1 FROM Usr_WIP_Review_Subs_HOD sHOD WHERE U.Code = sHOD.UserCode)) FROM Users U WHERE U.Code = '{0}']".format(_tikitUser))
-    # need to get other stats before posting to HOD Approved table
-    tmpSQL = "SELECT 'No of WO Reqs' = (SELECT COUNT(mWIP.ID) FROM Usr_AccWIP mWIP WHERE mWIP.BatchID = '{0}')".format(tmpBatchID)
-    tmpTotalWOReqs = runSQL(tmpSQL, False, '', '')
-
-    tmpSQL = "SELECT 'No still to review' = (SELECT COUNT(mWIP.ID) FROM Usr_AccWIP mWIP WHERE ISNULL(mWIP.WriteOffType, '') != '' AND ISNULL(mWIP.WO_Approved_Status, '') = '' "
-    tmpSQL += "AND mWIP.BatchID = '{0}')".format(tmpBatchID)
-    tmpTotalLeftToReview = runSQL(tmpSQL, False, '', '')
-    tmpTotalReviewed = int(tmpTotalWOReqs) - int(tmpTotalLeftToReview)
-
-    tmpSQL = "SELECT 'Num Approved' = (SELECT COUNT(mWIP.ID) FROM Usr_AccWIP mWIP WHERE ISNULL(mWIP.WriteOffType, '') != '' AND mWIP.WO_Approved_Status = 'Approved' "
-    tmpSQL += "AND mWIP.BatchID = '{0}')".format(tmpBatchID)
-    tmpTotalApproved = runSQL(tmpSQL, False, '', '')
-  
-    tmpSQL = "SELECT 'Num Rejected' = (SELECT COUNT(mWIP.ID) FROM Usr_AccWIP mWIP WHERE ISNULL(mWIP.WriteOffType, '') != '' AND mWIP.WO_Approved_Status = 'Rejected' "
-    tmpSQL += "AND mWIP.BatchID = '{0}')".format(tmpBatchID)
-    tmpTotalRejected = runSQL(tmpSQL, False, '', '')
-
-    tmpSQL = "SELECT 'Num To Discuss' = (SELECT COUNT(mWIP.ID) FROM Usr_AccWIP mWIP WHERE ISNULL(mWIP.WriteOffType, '') != '' AND mWIP.WO_Approved_Status = 'To discuss' "
-    tmpSQL += "AND mWIP.BatchID = '{0}')".format(tmpBatchID)
-    tmpTotalTBD = runSQL(tmpSQL, False, '', '')
-  
-    ## update all APPROVED matters 'Sent to Accounts' date to todays date (where there is no date)
-    updateSQL = "UPDATE Usr_AccWIP SET Date_WO_Approval_Sent = GETDATE(), WO_Approved_Status = 'Sent to Accounts' WHERE BatchID = '{0}'".format(tmpBatchID)
-    runSQL(updateSQL, True, "There was an error updating the 'Date Write-Off Approval Sent' field", "SUBMIT: Error updating 'Date WO Approval Sent'...")
-
-    # finally, add to the 'trigger' table so that Task Centre sends the email
-    insertTrig_SQL = "INSERT INTO Usr_WIP_Review_Subs_HOD (UserCode, Date_Submitted, Total_To_Review, Total_Approved, Total_Rejected, Total_TBD, BatchID) "
-    insertTrig_SQL += "VALUES ('{0}', GETDATE(), {1}, {2}, {3}, {4}, '{5}')".format(_tikitUser, tmpTotalLeftToReview, tmpTotalApproved, tmpTotalRejected, tmpTotalTBD, tmpBatchID)
-    runSQL(insertTrig_SQL, True, "There was an error adding the trigger for sending email to Accounts.\n\nPlease screenshot this message and send it to IT Support and they should be able to manually trigger.", "SUBMIT: Error adding 'trigger' for email...")
-
-    tmpMsg = "Thank you for W/O approvals, these have been emailed onto Accounts for processing.\n\n"
-    tmpMsg += "Summary of items sent in this batch (ID: {0})".format(tmpBatchID)
-    tmpMsg += "\nTotal reviewed: {0}".format(tmpTotalReviewed)
-    tmpMsg += "\nTotal 'Approved': {0}".format(tmpTotalApproved)
-    tmpMsg += "\nTotal 'Rejected': {0}".format(tmpTotalRejected)
-    tmpMsg += "\nTotal 'To discuss': {0}".format(tmpTotalTBD)
-    tmpMsg += "\n\nTotal still left to review: {0}".format(tmpTotalLeftToReview)
-
-    MessageBox.Show(tmpMsg, msgTitle)
-    return
-
-  else:
-    msgTitle = "Submit monthly WIP Write-Off Requests to Team Leader..."
-    tmpMsg = "Are you sure you want to submit WIP Write-Off requests to your Team Leader now?\n\nThis will only email those matters you have marked as 'Full WriteOff' or 'Partial WriteOff' against"
-    tmpResult = MessageBox.Show(tmpMsg, msgTitle, MessageBoxButtons.YesNo)
-  
-    if tmpResult == DialogResult.No:
-      return
-
-    # get counts for next part
-    feCode = cbo_FeeEarner.SelectedItem['Code']
-    totalMatters = dg_WIPReview.Items.Count
-    totalMattersWithWOReq = runSQL("SELECT COUNT(M.Number) FROM Matters M LEFT OUTER JOIN Usr_AccWIP WIPN ON M.EntityRef = WIPN.EntityRef AND M.Number = WIPN.MatterNo WHERE M.FeeEarnerRef = '{0}' AND ISNULL(WIPN.WriteOffType, '') != ''".format(feCode), False, '', '')
-
-    if int(totalMattersWithWOReq) == 0:
-      MessageBox.Show("No email will be sent because it appears there are no matters marked as either 'Full WriteOff' or 'Partial WriteOff' (in 'Write-Off Type' column)!", msgTitle)
-    else:
-      # otherwise we continue - here we need to update a field (insert a row) to act as a trigger for us as we need Task Centre 
-      tmpSQL = "INSERT INTO Usr_WIP_Review_Submissions(UserCode, Submitting_User, Date_of_Submission, Total_Current_Matters, Count_With_Notes) "
-      tmpSQL += "VALUES ('{0}', '{1}', GETDATE(), {2}, {3})".format(feCode, _tikitUser, totalMatters, totalMattersWithWOReq)
-      runSQL(tmpSQL, False, '', '')
-
-      lbl_LastSubmittedDate.Content = _tikitResolver.Resolve("[SQL: SELECT CONVERT(NVARCHAR, GETDATE(), 103)]")
-      MessageBox.Show("Thank you for your request, these have been passed onto your Team Leader for review", msgTitle)
-  return
-
 
 def btn_Help_Clicked(s, event):
   kbLink = "https://thackraywilliams764.workplace.com/work/knowledge/2748766381952851" 
@@ -882,7 +701,7 @@ class cls_dgClientLedger(object):
 
 
 def refresh_dgClientLedger(s, event):
-
+  MessageBox.Show("Error 5")
   if dg_WIPReview.SelectedIndex == -1:
     ti_ClientLedger.Header = 'Client Ledger - No data'
     return
@@ -980,35 +799,12 @@ def myOnFormLoadEvent(s, event):
   # determine if user is can Approve their own 'write-offs' (if they can, the following should return True, else False is returned)
   global UserIsHOD
   UserIsHOD = canApproveSelf(userToCheck = _tikitUser)
-  update_UI_For_HOD(s, event)
   ti_CaseDocs.Visibility = Visibility.Collapsed
   return
 
-
-def update_UI_For_HOD(s, event):
-
-  # if current user is a HOD, then we need to change text of 'Submit' button as they auto-approve their own Write-Offs. 
-  # Other code in this module has been updated to reflect this (eg: when marking for write-off, we set 'HOD WO Status' to 'Approved')
-  currentFE = cbo_FeeEarner.SelectedItem['Code']
-  global UserIsHOD
-
-  if currentFE == _tikitUser:
-    if UserIsHOD == True:
-      tb_SubmitButton.Text = "Send to Accounts"
-      btn_Submit.ToolTip = "As you are a HOD, you can click here to send your Write-Off requests directly to the Accounts department"
-    else:
-      tb_SubmitButton.Text = "SUBMIT to Team Lead"
-      btn_Submit.ToolTip = "Click here to submit your Write-Off requests (Matters marked with a 'Write-Off Type') and notes to your Head Of Department for review..."    
-
-  else:
-    tb_SubmitButton.Text = "SUBMIT to Team Lead"
-    btn_Submit.ToolTip = "Click here to submit your Write-Off requests (Matters marked with a 'Write-Off Type') and notes to your Head Of Department for review..."
-  return
-
-
 def cbo_FeeEarner_SelectionChanged(s, event):
   refreshWIPReviewDataGrid(s, event)
-  update_UI_For_HOD(s, event)
+
   return
 
 # # # # # # # # # # # #  C A S E   D O C S   -   F U N C T I O N S  # # # # # # # # # # # # # # 
@@ -1197,11 +993,7 @@ chk_ViewDetails.Click += update_Details_Datagrids
 
 # Bulk update area
 lbl_LastSubmittedDate = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_LastSubmittedDate')
-btn_Submit = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_Submit')
-btn_Submit.Click += btn_Submit_Clicked
-
 # following is the textblock residing inside the 'Submit' button as we need text to wrap, and to change according to users 'canApproveOwn'
-tb_SubmitButton = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'tb_SubmitButton')
 
 # Main DataGrid
 dg_WIPReview = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'dg_WIPReview')

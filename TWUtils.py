@@ -32,7 +32,7 @@ def runSQL(codeToRun, showError = False, errorMsgText = "", errorMsgTitle = "", 
   # showError     = True / False. Indicates whether or not to display message upon error
   # errorMsgText  = Text to display in the body of the message box upon error (note: actual SQL will automatically be included, so no need to re-supply that)
   # errorMsgTitle = Text to display in the title bar of the message box upon error
-  
+
   if len(codeToRun) < 10:
     MessageBox.Show("The supplied 'codeToRun' doesn't appear long enough, please check and update this code if necessary.\nPassed SQL: " + str(codeToRun), "ERROR: runSQL...")
     return
@@ -273,12 +273,14 @@ def get_FullEntityRef(shortRef):
 def getTextualTime(inputMinutes):
   # This function takes the 'inputMinutes' and returns a nicer string showing time including 'days'
   # Eg: if 'inputMinutes' = 2880, output will the '2 days + 00:00' (HH:MM)
+  if inputMinutes == '':
+    return '00:00'
   outputText = ''
   myMins = inputMinutes
 
   myHoursI = int(myMins/60)                         # This gives us an INTEGER (no deciaml) of num of minutes divided by 60
   minsRemainder = myMins % 60                       # This will give us just the REMAINDER of the same calculation (using mod)
-
+  MessageBox.Show("error in get textual time 2")
   if myHoursI > 24:                                 # If there's more than 24 hours
     myDays = int(myHoursI/24)                       # This gives us an INTEGER (no decimal) of num of hours divided by 24
     timRemain = myHoursI % 24                       # This will give us just the REMAINDER of the same calculation (using mod)
@@ -287,12 +289,12 @@ def getTextualTime(inputMinutes):
     outputText += ' days + ' if myDays > 1 else ' day + '
   else:
     timRemain = myHoursI                            # num of hours is less than 24, so we'll just use our current 'hours' variable
-
+  MessageBox.Show("error in get textual time 3")
   if len(str(timRemain)) == 1:                      # next we output the hours remaining (including a leading zero if only one character long
     outputText += '0' + str(timRemain)
   else:
     outputText += str(timRemain)
-
+  MessageBox.Show("error in get textual time 4")
   outputText += ":"                                 # add the hours and minutes separator
   if len(str(minsRemainder)) == 1:                  # similar to 'hours' above, but for 'minutes' (include leading zero if only one character long)
     outputText += '0' + str(minsRemainder)
