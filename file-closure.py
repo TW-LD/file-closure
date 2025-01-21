@@ -35,14 +35,16 @@ all_ticked = False
 
 ## Main WIP Review DataGrid
 class WIPreview(object):
-    def __init__(self, myTicked, myRef, myClient, myMatDesc, myEntRef, myMatNo, myFENote):
-        self.iTemTicked  = myTicked
-        self.wOurRef     = myRef
-        self.wClientName = myClient
-        self.wMatDesc    = myMatDesc
-        self.wEntRef     = myEntRef
-        self.wMatNo      = myMatNo
-        self.wFENote     = myFENote
+    def __init__(self, myTicked, myRef, myClient, myMatDesc, myEntRef, myMatNo, myFENote, myTimeInactive, myLastUpdated):
+        self.iTemTicked   = myTicked
+        self.wOurRef      = myRef
+        self.wClientName  = myClient
+        self.wMatDesc     = myMatDesc
+        self.wEntRef      = myEntRef
+        self.wMatNo       = myMatNo
+        self.wFENote      = myFENote
+        self.wTimeInactive= myTimeInactive
+        self.wLastUpdated = myLastUpdated
         return
     
     def __getitem__(self, index):
@@ -58,6 +60,12 @@ class WIPreview(object):
             return self.wMatDesc
         elif index == 'FENote':           
             return self.wFENote
+        elif index == 'TimeInactive':
+            return self.wTimeInactive
+        elif index == 'LastUpdated':
+            return self.wLastUpdated
+        elif index == 'ClientName':
+            return self.wClientName
         return None
 
 
@@ -71,19 +79,52 @@ def refreshWIPReviewDataGrid(s, event):
   # TODO: Need to add a table and SQL grab for fee earner notes for archiving.
 
   wip_SQL = """
-      SELECT
-          '0-OurRef'      = E.ShortCode + '/' + CONVERT(varchar, M.Number),
-          '1-Client Name' = E.Name,
-          '2-Matter Desc' = M.Description,
-          '3-EntRef'      = M.EntityRef,
-          '4-MatNo'       = M.Number
-      FROM
-          Matters M
-          LEFT OUTER JOIN Entities E
-              ON M.EntityRef = E.Code
-      WHERE
-          M.FeeEarnerRef = '{0}'
-  """.format(cbo_FeeEarner.SelectedItem['Code'])
+  SELECT
+      -- Existing columns
+      '0-OurRef'        = E.ShortCode + '/' + CONVERT(VARCHAR, M.Number),
+      '1-Client Name'   = E.Name,
+      '2-Matter Desc'   = M.Description,
+      '3-EntRef'        = M.EntityRef,
+      '4-MatNo'         = M.Number,
+      '5-ArchivingNote' = FCH.ArchivingNote,
+      '6-TimeInactive' = 
+       DATEDIFF(week,(
+          SELECT MAX(d)
+          FROM
+          (
+              -- 1) Last Bill Date
+              SELECT M.LastBillPostingDate AS d
+
+              UNION ALL
+
+              -- 2) Last Time Posting
+              SELECT M.LastTimePostingDate
+
+              UNION ALL
+
+              -- 3) Last Document (Case Manager) Date
+              SELECT 
+              (
+                  SELECT TOP 1 CM.StepCreated
+                  FROM View_CaseManagerMP CM
+                  WHERE CM.EntityRef = M.EntityRef
+                    AND CM.MatterRef = M.Number
+                  ORDER BY CM.StepCreated DESC
+              )
+          ) AS AllDates
+      ), GETDATE()),
+      '7-LastUpdated' = FCH.LastUpdated
+
+  FROM Matters M
+      LEFT OUTER JOIN Entities E
+          ON M.EntityRef = E.Code
+      LEFT OUTER JOIN Usr_FileClosureHeader FCH
+          ON FCH.EntityRef = M.EntityRef
+          AND FCH.MatterNo = M.Number
+  WHERE
+      M.FeeEarnerRef = '{0}'
+  ORDER BY [6-TimeInactive] DESC;
+    """.format(cbo_FeeEarner.SelectedItem['Code'])
 
   _tikitDbAccess.Open(wip_SQL)
   mItem = []
@@ -98,6 +139,9 @@ def refreshWIPReviewDataGrid(s, event):
               iMatDesc = '' if dr.IsDBNull(2) else dr.GetString(2)  # 2-Matter Desc
               iEntRef  = '' if dr.IsDBNull(3) else dr.GetString(3)  # 3-EntRef
               iMatNo   = 0  if dr.IsDBNull(4) else dr.GetValue(4)   # 4-MatNo
+              iFENote  = '' if dr.IsDBNull(5) else dr.GetString(5)  # 5-ArchivingNote
+              iTimeInactive = 0 if dr.IsDBNull(6) else dr.GetValue(6)  # 6-TimeInactive
+              iLastUpdated = '' if dr.IsDBNull(7) else dr.GetValue(7)  # 7-LastUpdated
 
               wip_item = WIPreview(
                   iTicked,
@@ -106,28 +150,24 @@ def refreshWIPReviewDataGrid(s, event):
                   iMatDesc,
                   iEntRef,
                   iMatNo,
-                  "hello"
+                  iFENote,
+                  iTimeInactive,
+                  iLastUpdated
               )
               mItem.append(wip_item)
       else:
           mItem.append(
-              WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0)
+              WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "")
           )
       dr.Close()
   else:
       mItem.append(
-          WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0)
+          WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "")
       )
 
   _tikitDbAccess.Close
 
   dg_WIPReview.ItemsSource = mItem
-
-  lbl_LastSubmittedDate.Content = _tikitResolver.Resolve(
-      "[SQL: SELECT ISNULL(CONVERT(NVARCHAR, MAX(Date_of_Submission), 103), 'Never') "
-      "FROM Usr_WIP_Review_Submissions "
-      "WHERE UserCode = '{0}']".format(cbo_FeeEarner.SelectedItem['Code'])
-  )
 
   return
 
@@ -141,22 +181,22 @@ def cellEdit_Finished(s, event):
   tmpEntity = dg_WIPReview.SelectedItem['EntityRef']
   tmpMatter = dg_WIPReview.SelectedItem['MatterNo']
   tmpNote = str(dg_WIPReview.SelectedItem['FENote'])
-  updateSQL = 'UPDATE Usr_AccWIP SET '
+  updateSQL = 'UPDATE Usr_FileClosureHeader SET '
   countToUpdate = 0
   global UserIsHOD
 
   # count if there are any rows in Usr_AccWIP and if zero, add a new row with default data
-  countExistingRows = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_AccWIP WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
+  countExistingRows = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureHeader WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
   if int(countExistingRows) == 0:
-    _tikitResolver.Resolve("[SQL: INSERT INTO Usr_AccWIP (EntityRef, MatterNo, FE_Notes, WriteOff) VALUES ('{0}', {1}, '', 'N')]".format(tmpEntity, tmpMatter))
+    _tikitResolver.Resolve("[SQL: INSERT INTO Usr_FileClosureHeader (EntityRef, MatterNo, ArchivingNote) VALUES ('{0}', {1}, 'N')]".format(tmpEntity, tmpMatter))
 
   # get ID of row in Usr_AccWIP table
-  IDtoUpdate = _tikitResolver.Resolve("[SQL: SELECT ID FROM Usr_AccWIP WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
+  IDtoUpdate = _tikitResolver.Resolve("[SQL: SELECT ID FROM Usr_FileClosureHeader WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
 
-  # if name of column is 'WIP Review Notes'
+  # if name of column is 'Archiving Notes'
   if tmpColName == 'Archiving Notes':
     if str(dg_WIPReview.SelectedItem['FENote']) != lbl_tmpNote.Content:
-      updateSQL += "FE_Notes = '{0}', LastUpdated = '{1}' ".format(tmpNote.replace("'","''"), newDate)
+      updateSQL += "ArchivingNote = '{0}', LastUpdated = '{1}' ".format(tmpNote.replace("'","''"), newDate)
       countToUpdate += 1
 
   if countToUpdate > 0:
@@ -164,11 +204,11 @@ def cellEdit_Finished(s, event):
     updateSQL += "WHERE ID = {0}".format(IDtoUpdate)
     _tikitResolver.Resolve("[SQL: {0}]".format(updateSQL))
    
-    countFEreply = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_AccWIPreply WHERE UserCode = '{0}']".format(_tikitUser))
+    countFEreply = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureHeader WHERE UserCode = '{0}']".format(_tikitUser))
     if int(countFEreply) == 0:
-      _tikitResolver.Resolve("[SQL: INSERT INTO Usr_AccWIPreply (UserCode, LastUpdated) VALUES ('{0}', '{1}')]".format(_tikitUser, newDate))
+      _tikitResolver.Resolve("[SQL: INSERT INTO Usr_FileClosureHeader (UserCode, LastUpdated, EntityRef, MatterNo) VALUES ('{0}', '{1}', '{entity}', '{matter}')]".format(_tikitUser, newDate, entity=tmpEntity, matter=tmpMatter))
     else:
-      _tikitResolver.Resolve("[SQL: UPDATE Usr_AccWIPreply SET LastUpdated = '{0}' WHERE UserCode = '{1}']".format(newDate, _tikitUser))
+      _tikitResolver.Resolve("[SQL: UPDATE Usr_FileClosureHeader SET LastUpdated = '{0}' WHERE UserCode = '{1}']".format(newDate, _tikitUser))
 
   # just update the ticked counter
   return
