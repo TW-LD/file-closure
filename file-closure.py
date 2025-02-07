@@ -35,7 +35,7 @@ all_ticked = False
 
 ## Main WIP Review DataGrid
 class WIPreview(object):
-    def __init__(self, myTicked, myRef, myClient, myMatDesc, myEntRef, myMatNo, myFENote, myTimeInactive, myLastUpdated):
+    def __init__(self, myTicked, myRef, myClient, myMatDesc, myEntRef, myMatNo, myFENote, myTimeInactive, myLastUpdated, myLastActivity):
         self.iTemTicked   = myTicked
         self.wOurRef      = myRef
         self.wClientName  = myClient
@@ -45,6 +45,7 @@ class WIPreview(object):
         self.wFENote      = myFENote
         self.wTimeInactive= myTimeInactive
         self.wLastUpdated = myLastUpdated
+        self.wLastActivity = myLastActivity
         return
     
     def __getitem__(self, index):
@@ -131,7 +132,28 @@ def refreshWIPReviewDataGrid(s, event):
               )
           ) AS AllDates
       ), GETDATE()),
-      '7-LastUpdated' = FCH.LastUpdated
+      '7-LastUpdated' = FCH.LastUpdated, 
+	  '8-LastActivity' = (SELECT TOP 1 Narr FROM
+          (
+              -- 1) Last Bill Date
+              SELECT 'Narr' = 'Last Bill Posting (' + CONVERT(VARCHAR(10), M.LastBillPostingDate, 103) + ')', 
+					'myDate' = M.LastBillPostingDate 
+
+              UNION ALL
+
+              -- 2) Last Time Posting
+              SELECT 'Narr' = 'Last Time Posting (' + CONVERT(VARCHAR(10), M.LastTimePostingDate, 103) + ')', 
+					'myDate' = M.LastTimePostingDate
+
+              UNION ALL
+
+              -- 3) Last Document (Case Manager) Date
+              SELECT TOP 1 'Narr' = 'Last document added to case (' + CONVERT(VARCHAR(10), CM.StepCreated, 103) + ')', 
+						'myDate' = CM.StepCreated
+						FROM View_CaseManagerMP CM
+		                WHERE CM.EntityRef = M.EntityRef AND CM.MatterRef = M.Number
+						ORDER BY CM.StepCreated DESC
+          ) AS AllDates ORDER BY myDate DESC)
 
   FROM Matters M
       LEFT OUTER JOIN Entities E
@@ -160,6 +182,7 @@ def refreshWIPReviewDataGrid(s, event):
               iFENote  = '' if dr.IsDBNull(5) else dr.GetString(5)  # 5-ArchivingNote
               iTimeInactive = 0 if dr.IsDBNull(6) else dr.GetValue(6)  # 6-TimeInactive
               iLastUpdated = '' if dr.IsDBNull(7) else dr.GetValue(7)  # 7-LastUpdated
+              iLastActivity = '' if dr.IsDBNull(8) else dr.GetString(8)
 
               wip_item = WIPreview(
                   iTicked,
@@ -170,17 +193,18 @@ def refreshWIPReviewDataGrid(s, event):
                   iMatNo,
                   iFENote,
                   iTimeInactive,
-                  iLastUpdated
+                  iLastUpdated,
+                  iLastActivity
               )
               mItem.append(wip_item)
       else:
           mItem.append(
-              WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "")
+              WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "", "")
           )
       dr.Close()
   else:
       mItem.append(
-          WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "")
+          WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "", "")
       )
 
   _tikitDbAccess.Close
