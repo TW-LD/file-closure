@@ -20,13 +20,12 @@ from System.Collections.Generic import Dictionary
 from System.Windows import Controls, Forms, LogicalTreeHelper
 from System.Windows import Data, UIElement, Visibility, Window
 from System.Windows.Controls import Button, Canvas, GridView, GridViewColumn, ListView, Orientation
-from System.Windows.Data import Binding
+from System.Windows.Data import Binding, IValueConverter
 from System.Windows.Forms import SelectionMode, MessageBox, MessageBoxButtons, DialogResult
 from System.Windows.Input import KeyEventHandler
 from System.Windows.Media import Brush, Brushes
 from TWUtils import *
 
- # TODO: Refactor main WIPReview datagrid, to match expected fields for the file closure tool
  # TODO: draft tables and structure for the checklist.
 
 #Global Variables
@@ -68,6 +67,24 @@ class WIPreview(object):
             return self.wClientName
         return None
 
+# Conditional highlighting tool
+class TimeInactiveToBrushConverter(IValueConverter):
+    def Convert(self, value, targetType, parameter, culture):
+        if not value:
+            return Brushes.Transparent
+        try:
+            weeksInactive = int(value)
+            if weeksInactive > 20:
+                return Brushes.Red
+            elif weeksInactive > 10:
+                return Brushes.Orange
+            else:
+                return Brushes.LightGreen
+        except:
+            return Brushes.Transparent
+
+    def ConvertBack(self, value, targetType, parameter, culture):
+        raise NotImplementedError("No need for ConvertBack")
 
 def refreshWIPReviewDataGrid(s, event):
   if cbo_FeeEarner.SelectedIndex == -1:
