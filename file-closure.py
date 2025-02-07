@@ -27,7 +27,7 @@ from System.Windows.Media import Brush, Brushes
 from TWUtils import *
 
  # TODO: draft tables and structure for the checklist.
-# hello Bobba Fett
+# Fix the merge error
 
 #Global Variables
 UserIsHOD = False
