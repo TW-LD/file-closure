@@ -619,6 +619,7 @@ def update_Details_Datagrids(s, event):
     refresh_Matter_UnbilledDisbs(s, event)
     refresh_Matter_UnpaidBills(s, event)
     refresh_dgClientLedger(s, event)
+    caseDocsPanel_refresh(s, event)
     #refresh_CaseDocs(s, event)
   return
 
@@ -990,7 +991,7 @@ def myOnFormLoadEvent(s, event):
   # determine if user is can Approve their own 'write-offs' (if they can, the following should return True, else False is returned)
   global UserIsHOD
   UserIsHOD = canApproveSelf(userToCheck = _tikitUser)
-  ti_CaseDocs.Visibility = Visibility.Collapsed
+  #ti_CaseDocs.Visibility = Visibility.Collapsed
   return
 
 def cbo_FeeEarner_SelectionChanged(s, event):
@@ -1506,18 +1507,6 @@ class NonzeroBalancesUpdateObject(object):
     self.TextColour = TextColour
     return
    
-    #ClientBalance, OfficeBalance, UnpaidBillBalance, UnpaidDisbBalance, MemoBalance, AnticipatedBalance, NYPBalance, DepositBalance, UnbilledTimeBalance, UnbilledTimeBalanceValue):
-    #self.ClientBalance = ClientBalance
-    #self.OfficeBalance = OfficeBalance
-    #self.UnpaidBillBalance = UnpaidBillBalance
-    #self.UnpaidDisbBalance = UnpaidDisbBalance
-    #self.MemoBalance = MemoBalance
-    #self.AnticipatedBalance = AnticipatedBalance
-    #self.NYPBalance = NYPBalance
-    #self.DepositedBalance = DepositBalance
-    #self.UnbilledTimeBalance = UnbilledTimeBalance
-    #self.UnbilledTimeBalanceValue = UnbilledTimeBalanceValue
-   
   def __getitem__(self, index):
     return None
 
@@ -1546,19 +1535,6 @@ def refresh_NonzeroBalances():
             ) v(BalanceType, BalanceValue, TextColour)
             WHERE EntityRef = '{0}' AND Number = {1};""".format(lbl_EntRef.Content, lbl_MatNo.Content)
 
-  #mySQL = """SELECT [Client Balance] = Client_Ac_Balance, 
-  #            [Office Balance] = Office_Ac_Balance, 
-  #            [Unpaid Bill Balance] = UnpaidBillBalance, 
-  #            [Unpaid Disb Balance] = UnbilledDisbBalance, 
-  #            [Memo Balance] = Memo_Balance, 
-  #            [Anticipated Balance] = AnticipatedDisbsBalance, 
-  #            [NYP Balance] = NYP_Balance, 
-  #            [Deposit Balance] = Depost_Ac_Balance, 
-  #            [Unbilled Time Balance] = UnbilledTimeBalance, 
-  #            [Unbilled Time Value] = UnbilledTimeBalanceValue 
-  #            FROM Matters 
-  #            WHERE EntityRef = '{0}' AND Number = {1}""".format(lbl_EntRef.Content, lbl_MatNo.Content)
-
   _tikitDbAccess.Open(mySQL)
   items = []
   countNonZero = 0
@@ -1576,33 +1552,6 @@ def refresh_NonzeroBalances():
 
           # increment count of only non-zero values
           countNonZero += 1 if tBalValue > 0 else 0
-          # TODO: just had a thought that now we're switching to ROWS instead of COLUMNS, it may make sense to EXCLUDE those = 0 from the get go
-          # TODO   so we needn't worry about cell colouring on DataGrid, as only those items shown are the pertinent ones
-          # TODO   may want to check with a Fee Earner though, as it may be that they DO want to still see that other values ARE zero?
-
-          #ClientBalance = 'None' if dr.IsDBNull(0) else dr.GetValue(0)
-          #OfficeBalance = 'None' if dr.IsDBNull(1) else dr.GetValue(1)
-          #UnpaidBillBalance = 'None' if dr.IsDBNull(2) else dr.GetValue(2)
-          #UnpaidDisbBalance = 'None' if dr.IsDBNull(3) else dr.GetValue(3)
-          #MemoBalance = 'None' if dr.IsDBNull(4) else dr.GetValue(4)
-          #AnticipatedBalance = 'None' if dr.IsDBNull(5) else dr.GetValue(5)
-          #NYPBalance = 'None' if dr.IsDBNull(6) else dr.GetValue(6)
-          #DepositBalance = 'None' if dr.IsDBNull(7) else dr.GetValue(7)
-          #UnbilledTimeBalance = 'None' if dr.IsDBNull(8) else dr.GetValue(8)
-          #UnbilledTimeBalanceValue = 'None' if dr.IsDBNull(9) else dr.GetValue(9)
-          #
-          ## Was having an issue where it would return a row of all 0
-          ## The code below goes over the values and checks if theres a value thats not equal to 0, if so then
-          ## c is incremented and the row is added to the datagrid
-          #c = 0
-          #tmp = [ClientBalance, OfficeBalance, UnpaidBillBalance, UnpaidDisbBalance, MemoBalance, AnticipatedBalance, NYPBalance, DepositBalance, UnbilledTimeBalance, UnbilledTimeBalance]
-          # 
-          #for val in tmp:
-          #  if int(val) != 0:
-          #    c +=1
-          #
-          #if c > 0:
-          #  items.append(NonzeroBalancesUpdateObject(ClientBalance, OfficeBalance, UnpaidBillBalance, UnpaidDisbBalance, MemoBalance, AnticipatedBalance, NYPBalance, DepositBalance, UnbilledTimeBalance, UnbilledTimeBalanceValue))
 
     dr.Close()
   _tikitDbAccess.Close()
