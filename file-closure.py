@@ -2032,7 +2032,7 @@ cbo_FeeEarner.SelectionChanged += cbo_FeeEarner_SelectionChanged
 btn_ViewArchiveDetails = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_ViewArchiveDetails')
 btn_ViewArchiveDetails.Click += toggle_ViewArchiveMatterDetails
 
-btn_SubmitMatterForArchiving = = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_SubmitMatterForArchiving')
+btn_SubmitMatterForArchiving = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_SubmitMatterForArchiving')
 btn_SubmitMatterForArchiving.Click += btn_SubmitMatterForArchiving_Click
 txt_ArchivingNote = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'txt_ArchivingNote')
 lbl_ArchivingStatus = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_ArchivingStatus')
