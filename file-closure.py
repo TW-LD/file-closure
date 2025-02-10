@@ -603,24 +603,6 @@ def update_Details_Datagrids(s, event):
     lbl_ClientName.Content = dg_WIPReview.SelectedItem['ClientName']
     lbl_MatDesc.Content = dg_WIPReview.SelectedItem['MatDesc']
 
-#  # if 'viewDetails' toggle button is checked
-#  # TODO: Wouldn't it be better to always have this visible?  Are there any reasons to hide it?
-#  if chk_ViewDetails.IsChecked == True:
-#    # update other datagrids and not fogetting to update the ticked status
-#    dg_WIPReview.Height = 427
-#    grp_WIPReview.Visibility = Visibility.Visible
-#    populate_TimeUsersToShow(s, event)
-#    refresh_Matter_UnbilledTime(s, event)
-#    refresh_Matter_UnbilledDisbs(s, event)
-#    refresh_Matter_UnpaidBills(s, event)
-#    refresh_dgClientLedger(s, event)
-#
-#    populate_andSetTabVisibility_MatterArchiveDetails()
-#  else:
-#    # if not checked, hide the details and make the main datagrid bigger
-#    grp_WIPReview.Visibility = Visibility.Hidden
-#    dg_WIPReview.Height = 790
-
     populate_TimeUsersToShow(s, event)
     refresh_Matter_UnbilledTime(s, event)
     refresh_Matter_UnbilledDisbs(s, event)
@@ -2039,8 +2021,6 @@ btn_Refresh.Click += refreshWIPReviewDataGrid
 cbo_FeeEarner = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'cbo_FeeEarner')
 cbo_FeeEarner.SelectionChanged += cbo_FeeEarner_SelectionChanged
 
-#chk_ViewDetails = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'chk_ViewDetails')
-#chk_ViewDetails.Click += update_Details_Datagrids
 btn_ViewArchiveDetails = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_ViewArchiveDetails')
 btn_ViewArchiveDetails.Click += toggle_ViewArchiveMatterDetails
 
