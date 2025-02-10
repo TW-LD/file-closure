@@ -990,7 +990,7 @@ def myOnFormLoadEvent(s, event):
   # determine if user is can Approve their own 'write-offs' (if they can, the following should return True, else False is returned)
   global UserIsHOD
   UserIsHOD = canApproveSelf(userToCheck = _tikitUser)
-  #ti_CaseDocs.Visibility = Visibility.Collapsed
+  ti_CaseDocs.Visibility = Visibility.Collapsed
   return
 
 def cbo_FeeEarner_SelectionChanged(s, event):
