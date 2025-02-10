@@ -1974,6 +1974,9 @@ def btn_SubmitMatterForArchiving_Click(s, event):
   # This function will add an entry to the '?' table, which is linked to Task Centre task: '??'
   # The Task Centre task will create a new email to Accounts/Archiving team to signal that this matter is ready for archiving
 
+  tEntRef = dg_WIPReview.SelectedItem['EntityRef']
+  tMatNo = dg_WIPReview.SelectedItem['MatterNo']
+
   # Check here to see if all items have been ticked-off from Departmental checklists...
   osChecklistItems = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureChecklist WHERE EntityRef = '{entRef}' AND MatterNo = {matNo} AND AnswerYN = 'N']".format(entRef=tEntRef, matNo=tMatNo))
   if int(osChecklistItems) > 0:
@@ -1981,8 +1984,6 @@ def btn_SubmitMatterForArchiving_Click(s, event):
     return
 
   # get SQL friendly details that we can pass in to 'events' table...
-  tEntRef = dg_WIPReview.SelectedItem['EntityRef']
-  tMatNo = dg_WIPReview.SelectedItem['MatterNo']
   tClientName = lbl_ClientName.Content
   tClientName = tClientName.replace("'", "''")
   tMatDesc = lbl_MatDesc.Content
