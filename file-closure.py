@@ -253,29 +253,6 @@ def cellEdit_Finished(s, event):
   return
 
 
-class SortByList(object):
-  def __init__(self, myCode, myName, mySQLCode):
-    self.Ref = myCode
-    self.Name = myName
-    self.SQLCode = mySQLCode
-    return
-    
-  def __getitem__(self, index):
-    if index == 'Ref':
-      return self.Code
-    elif index == 'Name':
-      return self.Name
-    elif index == 'SQLCode':
-      return self.SQLCode
-
-def populate_SortByList(s, event):
-  myItems = []
-  
-  myItems.append(SortByList(0, 'Our Ref', '[0-OurRef]'))
-  myItems.append(SortByList(1, 'Our Ref Descending', '[0-OurRef] DESC'))
-  cbo_SortBy.ItemsSource = myItems
-  return
-
 class UsersList(object):
   def __init__(self, myFECode, myFEName):
     self.Code = myFECode
@@ -324,8 +301,6 @@ def setFE_toCurrentUser(s, event):
       tMatchFound = True
       break
 
-  if tMatchFound == True:
-    cbo_SortBy.SelectedIndex = 5
   return
 
 def totalNoOfItems():
@@ -2063,8 +2038,6 @@ btn_Refresh.Click += refreshWIPReviewDataGrid
 
 cbo_FeeEarner = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'cbo_FeeEarner')
 cbo_FeeEarner.SelectionChanged += cbo_FeeEarner_SelectionChanged
-cbo_SortBy = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'cbo_SortBy')
-cbo_SortBy.SelectionChanged += refreshWIPReviewDataGrid
 
 #chk_ViewDetails = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'chk_ViewDetails')
 #chk_ViewDetails.Click += update_Details_Datagrids
