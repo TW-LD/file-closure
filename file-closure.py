@@ -164,7 +164,7 @@ def refreshWIPReviewDataGrid(s, event):
 	   CASE WHEN (SELECT COUNT(ID) FROM UndertakingsRegister WHERE EntityRef = M.EntityRef AND MatterNo = M.Number AND Status = 1) > 0 THEN 1 ELSE 0 END +
 	   CASE WHEN (SELECT COUNT(LastFinancialPostingDate) FROM Ac_Forward_Matter_Balances WHERE EntityRef = M.EntityRef AND MatterNo = M.Number) > 0 THEN 1 ELSE 0 END +
 	   CASE WHEN (SELECT COUNT(ID) FROM Ac_Bank_Rec WHERE Client_Code = M.EntityRef AND Matter_No = M.Number) > 0 THEN 1 ELSE 0 END +
-	   CASE WHEN (SELECT COUNT(ID) FROM Ac_Posting_Slips WHERE Client1Code = M.EntityRef AND Client1MatterNo = M.Number AND Status IN ('U','A')) > 0 THEN 1 ELSE 0 END +
+	   CASE WHEN (SELECT COUNT(ID) FROM Ac_Posting_Slips WHERE Client1Code = M.EntityRef AND Client1MatterNo = M.Number AND Status IN ('U','A', 'P', 'D', 'C')) > 0 THEN 1 ELSE 0 END +
 	   CASE WHEN (SELECT CASE WHEN Client_Ac_Balance > 0 THEN 1 ELSE 0 END + CASE WHEN Office_Ac_Balance > 0 THEN 1 ELSE 0 END + 
               CASE WHEN UnpaidBillBalance > 0 THEN 1 ELSE 0 END + CASE WHEN UnbilledDisbBalance > 0 THEN 1 ELSE 0 END + 
               CASE WHEN Memo_Balance > 0 THEN 1 ELSE 0 END + CASE WHEN AnticipatedDisbsBalance  > 0 THEN 1 ELSE 0 END +  
