@@ -2024,10 +2024,6 @@ cbo_FeeEarner.SelectionChanged += cbo_FeeEarner_SelectionChanged
 btn_ViewArchiveDetails = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_ViewArchiveDetails')
 btn_ViewArchiveDetails.Click += toggle_ViewArchiveMatterDetails
 
-# Bulk update area
-lbl_LastSubmittedDate = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_LastSubmittedDate')
-# following is the textblock residing inside the 'Submit' button as we need text to wrap, and to change according to users 'canApproveOwn'
-
 # Main DataGrid
 dg_WIPReview = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'dg_WIPReview')
 dg_WIPReview.SelectionChanged += update_Details_Datagrids
