@@ -619,8 +619,7 @@ def update_Details_Datagrids(s, event):
     refresh_Matter_UnbilledDisbs(s, event)
     refresh_Matter_UnpaidBills(s, event)
     refresh_dgClientLedger(s, event)
-    caseDocsPanel_refresh(s, event)
-    #refresh_CaseDocs(s, event)
+    #caseDocsPanel_refresh(s, event)
   return
 
 
