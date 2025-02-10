@@ -34,7 +34,7 @@ all_ticked = False
 
 ## Main WIP Review DataGrid
 class WIPreview(object):
-  def __init__(self, myTicked, myRef, myClient, myMatDesc, myEntRef, myMatNo, myFENote, myTimeInactive, myLastUpdated, myLastActivity):
+  def __init__(self, myTicked, myRef, myClient, myMatDesc, myEntRef, myMatNo, myFENote, myTimeInactive, myLastUpdated, myLastActivity, myArchiveIssueCount):
     self.iTemTicked       = myTicked
     self.wOurRef          = myRef
     self.wClientName      = myClient
@@ -46,6 +46,7 @@ class WIPreview(object):
     self.wTimeInactiveYMD = convert_days(number_of_days=myTimeInactive)
     self.wLastUpdated     = myLastUpdated
     self.wLastActivity = myLastActivity
+    self.wCountOfArchiveIssues = myArchiveIssueCount
     return
     
   def __getitem__(self, index):
@@ -69,6 +70,8 @@ class WIPreview(object):
       return self.wClientName
     elif index == 'TimeInactiveYMD':
       return self.wTimeInactiveYMD
+    elif index == 'ArchiveIssueCount':
+      return self.wCountOfArchiveIssues
     return None
 
 # Conditional highlighting tool
@@ -138,24 +141,41 @@ def refreshWIPReviewDataGrid(s, event):
 	    '8-LastActivity' = (SELECT TOP 1 Narr FROM
           (
               -- 1) Last Bill Date
-              SELECT 'Narr' = 'Last Bill Posting (' + CONVERT(VARCHAR(10), M.LastBillPostingDate, 103) + ')', 
+              SELECT 'Narr' = 'Bill Posting (' + CONVERT(VARCHAR(10), M.LastBillPostingDate, 103) + ')', 
 					'myDate' = M.LastBillPostingDate 
 
               UNION ALL
 
               -- 2) Last Time Posting
-              SELECT 'Narr' = 'Last Time Posting (' + CONVERT(VARCHAR(10), M.LastTimePostingDate, 103) + ')', 
+              SELECT 'Narr' = 'Time Posting (' + CONVERT(VARCHAR(10), M.LastTimePostingDate, 103) + ')', 
 					'myDate' = M.LastTimePostingDate
 
               UNION ALL
 
               -- 3) Last Document (Case Manager) Date
-              SELECT TOP 1 'Narr' = 'Last document added to case (' + CONVERT(VARCHAR(10), CM.StepCreated, 103) + ')', 
+              SELECT TOP 1 'Narr' = 'Document added (' + CONVERT(VARCHAR(10), CM.StepCreated, 103) + ')', 
 						'myDate' = CM.StepCreated
 						FROM View_CaseManagerMP CM
 		                WHERE CM.EntityRef = M.EntityRef AND CM.MatterRef = M.Number
 						ORDER BY CM.StepCreated DESC
-          ) AS AllDates ORDER BY myDate DESC)
+          ) AS AllDates ORDER BY myDate DESC),
+      '9-CountOfArchiveIssues' = (CASE WHEN (SELECT COUNT(Code) FROM Diary_Tasks WHERE EntityRef = M.EntityRef AND MatterNoRef = M.Number) > 0 THEN 1 ELSE 0 END +
+	   CASE WHEN (SELECT COUNT(Code) FROM Diary_Appointments WHERE EntityRef = M.EntityRef AND MatterNoRef = M.Number) > 0 THEN 1 ELSE 0 END +
+	   CASE WHEN (SELECT COUNT(ID) FROM UndertakingsRegister WHERE EntityRef = M.EntityRef AND MatterNo = M.Number AND Status = 1) > 0 THEN 1 ELSE 0 END +
+	   CASE WHEN (SELECT COUNT(LastFinancialPostingDate) FROM Ac_Forward_Matter_Balances WHERE EntityRef = M.EntityRef AND MatterNo = M.Number) > 0 THEN 1 ELSE 0 END +
+	   CASE WHEN (SELECT COUNT(ID) FROM Ac_Bank_Rec WHERE Client_Code = M.EntityRef AND Matter_No = M.Number) > 0 THEN 1 ELSE 0 END +
+	   CASE WHEN (SELECT COUNT(ID) FROM Ac_Posting_Slips WHERE Client1Code = M.EntityRef AND Client1MatterNo = M.Number AND Status IN ('U','A')) > 0 THEN 1 ELSE 0 END +
+	   CASE WHEN (SELECT CASE WHEN Client_Ac_Balance > 0 THEN 1 ELSE 0 END + CASE WHEN Office_Ac_Balance > 0 THEN 1 ELSE 0 END + 
+              CASE WHEN UnpaidBillBalance > 0 THEN 1 ELSE 0 END + CASE WHEN UnbilledDisbBalance > 0 THEN 1 ELSE 0 END + 
+              CASE WHEN Memo_Balance > 0 THEN 1 ELSE 0 END + CASE WHEN AnticipatedDisbsBalance  > 0 THEN 1 ELSE 0 END +  
+              CASE WHEN NYP_Balance  > 0 THEN 1 ELSE 0 END + CASE WHEN Depost_Ac_Balance  > 0 THEN 1 ELSE 0 END + 
+              CASE WHEN UnbilledTimeBalance  > 0 THEN 1 ELSE 0 END +  CASE WHEN UnbilledTimeBalanceValue  > 0 THEN 1 ELSE 0 END 
+              FROM Matters 
+              WHERE EntityRef = M.EntityRef AND Number = M.Number) > 0 THEN 1 ELSE 0 END +
+	   CASE WHEN (SELECT COUNT(PTR.Id) FROM PostToReview PTR LEFT OUTER JOIN Cm_CaseItems CI ON PTR.StepID = CI.ItemID LEFT OUTER JOIN Cm_CaseItems Ag ON CI.ParentID = ag.ItemID 
+					LEFT OUTER JOIN Cm_Agendas Ags ON Ag.ItemID = Ags.ItemID WHERE Ags.EntityRef = M.EntityRef AND Ags.MatterNo = M.Number AND PTR.ReadDate IS NULL) > 0 THEN 1 ELSE 0 END +
+	   CASE WHEN (SELECT COUNT(Cm.ItemID) FROM Cm_Steps CM LEFT OUTER JOIN Cm_CaseItems CI ON CM.ItemID = CI.ItemID LEFT OUTER JOIN Cm_CaseItems Ag ON CI.ParentID = Ag.ItemID 
+			LEFT OUTER JOIN Cm_Agendas Ags ON Ag.ItemID = Ags.ItemID WHERE Ags.EntityRef = M.EntityRef AND Ags.MatterNo = M.Number AND Cm.CVSLockUser <> '' ) > 0 THEN 1 ELSE 0 END)
 
   FROM Matters M
       LEFT OUTER JOIN Entities E
@@ -185,24 +205,15 @@ def refreshWIPReviewDataGrid(s, event):
               iTimeInactive = 0 if dr.IsDBNull(6) else dr.GetValue(6)  # 6-TimeInactive
               iLastUpdated = '' if dr.IsDBNull(7) else dr.GetValue(7)  # 7-LastUpdated
               iLastActivity = '' if dr.IsDBNull(8) else dr.GetString(8)
+              iCountArchIssues = 0 if dr.IsDBNull(9) else dr.GetValue(9)  
 
-              wip_item = WIPreview(
-                  iTicked,
-                  iRef,
-                  iClient,
-                  iMatDesc,
-                  iEntRef,
-                  iMatNo,
-                  iFENote,
-                  iTimeInactive,
-                  iLastUpdated,
-                  iLastActivity)
+              wip_item = WIPreview(iTicked, iRef, iClient, iMatDesc, iEntRef, iMatNo, iFENote, iTimeInactive, iLastUpdated, iLastActivity, iCountArchIssues)
               mItem.append(wip_item)
       else:
-          mItem.append(WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "", ""))
+          mItem.append(WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "", "", 0))
       dr.Close()
   else:
-      mItem.append(WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "", ""))
+      mItem.append(WIPreview(False, "-N/A-", "-No Data-", "-No Data-", "", 0, 0, 0, "", "", 0))
 
   _tikitDbAccess.Close
 
