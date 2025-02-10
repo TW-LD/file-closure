@@ -159,23 +159,24 @@ def refreshWIPReviewDataGrid(s, event):
 		                WHERE CM.EntityRef = M.EntityRef AND CM.MatterRef = M.Number
 						ORDER BY CM.StepCreated DESC
           ) AS AllDates ORDER BY myDate DESC),
-      '9-CountOfArchiveIssues' = (CASE WHEN (SELECT COUNT(Code) FROM Diary_Tasks WHERE EntityRef = M.EntityRef AND MatterNoRef = M.Number) > 0 THEN 1 ELSE 0 END +
-	   CASE WHEN (SELECT COUNT(Code) FROM Diary_Appointments WHERE EntityRef = M.EntityRef AND MatterNoRef = M.Number) > 0 THEN 1 ELSE 0 END +
-	   CASE WHEN (SELECT COUNT(ID) FROM UndertakingsRegister WHERE EntityRef = M.EntityRef AND MatterNo = M.Number AND Status = 1) > 0 THEN 1 ELSE 0 END +
-	   CASE WHEN (SELECT COUNT(LastFinancialPostingDate) FROM Ac_Forward_Matter_Balances WHERE EntityRef = M.EntityRef AND MatterNo = M.Number) > 0 THEN 1 ELSE 0 END +
-	   CASE WHEN (SELECT COUNT(ID) FROM Ac_Bank_Rec WHERE Client_Code = M.EntityRef AND Matter_No = M.Number) > 0 THEN 1 ELSE 0 END +
-	   CASE WHEN (SELECT COUNT(ID) FROM Ac_Posting_Slips WHERE Client1Code = M.EntityRef AND Client1MatterNo = M.Number AND Status IN ('U','A', 'P', 'D', 'C')) > 0 THEN 1 ELSE 0 END +
-	   CASE WHEN (SELECT CASE WHEN Client_Ac_Balance > 0 THEN 1 ELSE 0 END + CASE WHEN Office_Ac_Balance > 0 THEN 1 ELSE 0 END + 
-              CASE WHEN UnpaidBillBalance > 0 THEN 1 ELSE 0 END + CASE WHEN UnbilledDisbBalance > 0 THEN 1 ELSE 0 END + 
-              CASE WHEN Memo_Balance > 0 THEN 1 ELSE 0 END + CASE WHEN AnticipatedDisbsBalance  > 0 THEN 1 ELSE 0 END +  
-              CASE WHEN NYP_Balance  > 0 THEN 1 ELSE 0 END + CASE WHEN Depost_Ac_Balance  > 0 THEN 1 ELSE 0 END + 
-              CASE WHEN UnbilledTimeBalance  > 0 THEN 1 ELSE 0 END +  CASE WHEN UnbilledTimeBalanceValue  > 0 THEN 1 ELSE 0 END 
-              FROM Matters 
-              WHERE EntityRef = M.EntityRef AND Number = M.Number) > 0 THEN 1 ELSE 0 END +
-	   CASE WHEN (SELECT COUNT(PTR.Id) FROM PostToReview PTR LEFT OUTER JOIN Cm_CaseItems CI ON PTR.StepID = CI.ItemID LEFT OUTER JOIN Cm_CaseItems Ag ON CI.ParentID = ag.ItemID 
-					LEFT OUTER JOIN Cm_Agendas Ags ON Ag.ItemID = Ags.ItemID WHERE Ags.EntityRef = M.EntityRef AND Ags.MatterNo = M.Number AND PTR.ReadDate IS NULL) > 0 THEN 1 ELSE 0 END +
-	   CASE WHEN (SELECT COUNT(Cm.ItemID) FROM Cm_Steps CM LEFT OUTER JOIN Cm_CaseItems CI ON CM.ItemID = CI.ItemID LEFT OUTER JOIN Cm_CaseItems Ag ON CI.ParentID = Ag.ItemID 
-			LEFT OUTER JOIN Cm_Agendas Ags ON Ag.ItemID = Ags.ItemID WHERE Ags.EntityRef = M.EntityRef AND Ags.MatterNo = M.Number AND Cm.CVSLockUser <> '' ) > 0 THEN 1 ELSE 0 END)
+      '9-CountOfArchiveIssues' = (
+            (SELECT COUNT(Code) FROM Diary_Tasks WHERE EntityRef = M.EntityRef AND MatterNoRef = M.Number)  +
+	          (SELECT COUNT(Code) FROM Diary_Appointments WHERE EntityRef = M.EntityRef AND MatterNoRef = M.Number) +
+	          (SELECT COUNT(ID) FROM UndertakingsRegister WHERE EntityRef = M.EntityRef AND MatterNo = M.Number AND Status = 1) +
+	          (SELECT COUNT(EntityRef) FROM Ac_Forward_Matter_Balances WHERE EntityRef = M.EntityRef AND MatterNo = M.Number) +
+	          (SELECT COUNT(ID) FROM Ac_Bank_Rec WHERE Client_Code = M.EntityRef AND Matter_No = M.Number) +
+	          (SELECT COUNT(ID) FROM Ac_Posting_Slips WHERE Client1Code = M.EntityRef AND Client1MatterNo = M.Number AND Status IN ('U','A')) +
+	          (SELECT CASE WHEN Client_Ac_Balance > 0 THEN 1 ELSE 0 END + CASE WHEN Office_Ac_Balance > 0 THEN 1 ELSE 0 END + 
+                     CASE WHEN UnpaidBillBalance > 0 THEN 1 ELSE 0 END + CASE WHEN UnbilledDisbBalance > 0 THEN 1 ELSE 0 END + 
+                     CASE WHEN Memo_Balance > 0 THEN 1 ELSE 0 END + CASE WHEN AnticipatedDisbsBalance  > 0 THEN 1 ELSE 0 END +  
+                     CASE WHEN NYP_Balance  > 0 THEN 1 ELSE 0 END + CASE WHEN Depost_Ac_Balance  > 0 THEN 1 ELSE 0 END + 
+                     CASE WHEN UnbilledTimeBalance  > 0 THEN 1 ELSE 0 END +  CASE WHEN UnbilledTimeBalanceValue  > 0 THEN 1 ELSE 0 END 
+                     FROM Matters 
+                     WHERE EntityRef = M.EntityRef AND Number = M.Number) +
+	          (SELECT COUNT(PTR.Id) FROM PostToReview PTR LEFT OUTER JOIN Cm_CaseItems CI ON PTR.StepID = CI.ItemID LEFT OUTER JOIN Cm_CaseItems Ag ON CI.ParentID = ag.ItemID 
+		        			LEFT OUTER JOIN Cm_Agendas Ags ON Ag.ItemID = Ags.ItemID WHERE Ags.EntityRef = M.EntityRef AND Ags.MatterNo = M.Number AND PTR.ReadDate IS NULL) +
+	          (SELECT COUNT(Cm.ItemID) FROM Cm_Steps CM LEFT OUTER JOIN Cm_CaseItems CI ON CM.ItemID = CI.ItemID LEFT OUTER JOIN Cm_CaseItems Ag ON CI.ParentID = Ag.ItemID 
+		        	LEFT OUTER JOIN Cm_Agendas Ags ON Ag.ItemID = Ags.ItemID WHERE Ags.EntityRef = M.EntityRef AND Ags.MatterNo = M.Number AND Cm.CVSLockUser <> '' ))
 
   FROM Matters M
       LEFT OUTER JOIN Entities E
@@ -227,7 +228,7 @@ def cellEdit_Finished(s, event):
   # Get column name
   tmpCol = event.Column
   tmpColName = tmpCol.Header    
-  newDate = getSQLDate(_tikitResolver.Resolve("[SQL: SELECT GETDATE()]"))
+  #newDate = getSQLDate(_tikitResolver.Resolve("[SQL: SELECT GETDATE()]"))
   tmpEntity = dg_WIPReview.SelectedItem['EntityRef']
   tmpMatter = dg_WIPReview.SelectedItem['MatterNo']
   tmpNote = str(dg_WIPReview.SelectedItem['FENote'])
@@ -246,7 +247,7 @@ def cellEdit_Finished(s, event):
   # if name of column is 'Archiving Notes'
   if tmpColName == 'Archiving Notes':
     if str(dg_WIPReview.SelectedItem['FENote']) != lbl_tmpNote.Content:
-      updateSQL += "ArchivingNote = '{0}', LastUpdated = '{1}' ".format(tmpNote.replace("'","''"), newDate)
+      updateSQL += "ArchivingNote = '{0}', LastUpdated = GETDATE() ".format(tmpNote.replace("'","''"))
       countToUpdate += 1
 
   if countToUpdate > 0:
@@ -700,6 +701,9 @@ def populate_andSetTabVisibility_MatterArchiveDetails():
     ti_COD.Visibility = Visibility.Collapsed
   else:
     ti_COD.Visibility = Visibility.Visible
+
+  # update 'Status' for matter
+  lbl_ArchivingStatus.Content = _tikitResolver.Resolve("[SQL: SELECT ArchivingStatus FROM Usr_FileClosureHeader WHERE EntityRef = '{entRef}' AND MatterNo = {matNo}]".format(entRef=lbl_EntRef.Content, matNo=lbl_MatNo.Content))
   return 
 
 
@@ -1964,6 +1968,52 @@ def Clear_CheckedOut_Documents(s, event):
         _tikitResolver.Resolve(tmpSQL)
   return True
 
+
+def btn_SubmitMatterForArchiving_Click(s, event):
+  #! Linked to XAML control.event: btn_SubmitMatterForArchiving.Click
+  # This function will add an entry to the '?' table, which is linked to Task Centre task: '??'
+  # The Task Centre task will create a new email to Accounts/Archiving team to signal that this matter is ready for archiving
+
+  # Check here to see if all items have been ticked-off from Departmental checklists...
+  osChecklistItems = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureChecklist WHERE EntityRef = '{entRef}' AND MatterNo = {matNo} AND AnswerYN = 'N']".format(entRef=tEntRef, matNo=tMatNo))
+  if int(osChecklistItems) > 0:
+    MessageBox.Show("The Department Checklist hasn't been fully checked-off!\n\nPlease ensure you tick-off all items on the checklist before trying to submit", "Error: Submit Matter for Archiving...")
+    return
+
+  # get SQL friendly details that we can pass in to 'events' table...
+  tEntRef = dg_WIPReview.SelectedItem['EntityRef']
+  tMatNo = dg_WIPReview.SelectedItem['MatterNo']
+  tClientName = lbl_ClientName.Content
+  tClientName = tClientName.replace("'", "''")
+  tMatDesc = lbl_MatDesc.Content
+  tMatDesc = tMatDesc.replace("'", "''")
+  tFE = _tikitResolver.Resolve("[SQL: SELECT FeeEarnerRef FROM Matters WHERE EntityRef = '{entRef}' AND Number = {matNo}]".format(entRef=tEntRef, matNo=tMatNo))
+  addComments = txt_ArchivingNote.Text
+  addComments = addComments.replace("'", "''")
+
+  # create Insert SQL for Task Centre trigger
+  insertSQL = """
+    INSERT INTO Usr_FileClosure_Events(FullEntityRef, Matter_No, OurRef, ClientName, MatterDesc, 
+                              ActionTrigger, SubmittingUser, DateSubmitted, FeeEarner, AddtlComments) 
+      VALUES('{fullEntRef}', {matNo}, '{ourRef}', '{clientName}', '{matDesc}', '{actionTrigger}', '{subUser}', GETDATE(), '{feeEarner}', '{addtlComments}')
+  """.format(fullEntRef=tEntRef, matNo=tMatNo, 
+              ourRef=lbl_OurRef.Content, clientName=tClientName, matDesc=tMatDesc, actionTrigger='SubmitForArchiving', 
+              subUser=_tikitUser, feeEarner=tFE, addtlComments=addComments)
+
+  try:
+    _tikitResolver.Resolve("[SQL: {sql}]".format(sql=insertSQL))
+    MessageBox.Show("This Matter has been sent to Accounts for Archiving", "Send matter for Archiving...")
+    # update Archiving Status
+    _tikitResolver.Resolve("[SQL: UPDATE Usr_FileClosureHeader SET ArchivingStatus = 'SentForArchiving' WHERE EntityRef = '{entRef}' AND MatterNo = {matNo}]".format(entRef=tEntRef, matNo=tMatNo))
+  except:
+    MessageBox.Show("There was an issue sending this matter to Accounts for Archiving. \nSQL: {sql}".format(sql=insertSQL), "Send matter for Archiving...")
+    return
+
+  # return to main page
+  btn_ViewArchiveDetails.IsChecked = False
+  return
+
+
 ]]>
     </Init>
     <Loaded>
@@ -1981,6 +2031,11 @@ cbo_FeeEarner.SelectionChanged += cbo_FeeEarner_SelectionChanged
 
 btn_ViewArchiveDetails = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_ViewArchiveDetails')
 btn_ViewArchiveDetails.Click += toggle_ViewArchiveMatterDetails
+
+btn_SubmitMatterForArchiving = = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_SubmitMatterForArchiving')
+btn_SubmitMatterForArchiving.Click += btn_SubmitMatterForArchiving_Click
+txt_ArchivingNote = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'txt_ArchivingNote')
+lbl_ArchivingStatus = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_ArchivingStatus')
 
 # Main DataGrid
 dg_WIPReview = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'dg_WIPReview')
@@ -2092,7 +2147,6 @@ dg_CheckedOutDocuments = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'dg_Che
 CheckedOutDocumentsLabel = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'CheckedOutDocumentsLabel')
 btn_ClearCheckedOutDocs = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'btn_ClearCheckedOutDocs')
 btn_ClearCheckedOutDocs.Click += Clear_CheckedOut_Documents
-
 
 # on load functions (moved into dedicated funtion)
 myOnFormLoadEvent(_tikitSender, '')
