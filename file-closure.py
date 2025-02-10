@@ -971,7 +971,6 @@ def refresh_dgClientLedger(s, event):
 ## E N D   O F   C L I E N T    L E D G E R    D A T A G R I D   F U N C T I O N S ##
 
 def myOnFormLoadEvent(s, event):
-  populate_SortByList(s, event)
   populate_FeeEarnersList(s, event)
   setFE_toCurrentUser(s, event)
   set_cboFE_Enabled(s, event)
