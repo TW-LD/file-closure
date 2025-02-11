@@ -98,10 +98,6 @@ def refreshWIPReviewDataGrid(s, event):
     MessageBox.Show("No items to show as a Fee Earner hasn't been selected from the drop-down.\n\nPlease note that only the Accounts department are able to select a different Fee Earner", "Refresh WIP Review List...")
     return
 
-  # TODO: We need to redo the SQL below to grab the following fields: Our ref, Client Name, Matter Description, Time inactive, Archiving issues.
-  # TODO: Need to add a table and SQL grab for fee earner notes for archiving.
-  # TODO: MP: Changed to 'DaysInactive' (was initially 'week')
-
   wip_SQL = """
   SELECT
       -- Existing columns
@@ -703,7 +699,9 @@ def populate_andSetTabVisibility_MatterArchiveDetails():
     ti_COD.Visibility = Visibility.Visible
 
   # update 'Status' for matter
-  lbl_ArchivingStatus.Content = _tikitResolver.Resolve("[SQL: SELECT ArchivingStatus FROM Usr_FileClosureHeader WHERE EntityRef = '{entRef}' AND MatterNo = {matNo}]".format(entRef=lbl_EntRef.Content, matNo=lbl_MatNo.Content))
+  lbl_ArchivingStatus.Content = _tikitResolver.Resolve("[SQL: SELECT ISNULL(ArchivingStatus, 'With Fee Earner to review') FROM Usr_FileClosureHeader WHERE EntityRef = '{entRef}' AND MatterNo = {matNo}]".format(entRef=lbl_EntRef.Content, matNo=lbl_MatNo.Content))
+  # select Dept Checklist tab
+  ti_DeptChecklist.IsSelected = True
   return 
 
 
@@ -2015,6 +2013,176 @@ def btn_SubmitMatterForArchiving_Click(s, event):
   return
 
 
+class DeptChecklist(object):
+  def __init__(self, myID, myDisplayOrder, myItemText, myDone, myNotes):
+    self.dcID = myID
+    self.dcOrder = myDisplayOrder
+    self.dcItemText = myItemText
+    # remember to convert 'Y|N' into 'True|False' for checkbox
+    self.dcDone = False if myDone == 'N' else True
+    self.dcNotes = myNotes
+    return
+
+  def __getitem__(self, index):
+    if index == 'ID':
+      return self.dcID
+    elif index == 'DispOrder':
+      return self.dcOrder
+    elif index == 'ItemText':
+      return self.dcItemText
+    elif index == 'DoneYN':
+      # remember to convert 'True|False' for checkbox into 'Y|N'  
+      return 'N' if self.dcDone == False else 'Y'
+    elif index == 'Notes':
+      return self.dcNotes
+    else:
+      return None
+
+def refresh_DepartmentChecklist(s, event):
+
+  if checkForDepartmentChecklist_pullFromTemplate() == False:
+    #MessageBox.Show("No items for current Case Type or Department - list will not 'refresh'")
+    return
+
+  selEntity = lbl_EntRef.Content
+  selMatter = lbl_MatNo.Content
+  # otherwise, normal refresh
+  dcSQL = """SELECT ID, DisplayOrder, ItemText, AnswerYN, Notes FROM Usr_FileClosureChecklist
+              WHERE EntityRef = '{entRef}' AND MatterNo = {matNo} ORDER BY DisplayOrder""".format(entRef=selEntity, matNo=selMatter)
+
+  _tikitDbAccess.Open(dcSQL)
+  mItem = []
+
+  if _tikitDbAccess._dr is not None:
+    dr = _tikitDbAccess._dr
+    if dr.HasRows:
+      while dr.Read():
+        iID       = 0 if dr.IsDBNull(0) else dr.GetValue(0)  
+        iDO       = 0 if dr.IsDBNull(1) else dr.GetValue(1)  
+        iItemText = '' if dr.IsDBNull(2) else dr.GetString(2)  
+        iAnswerYN = 'N' if dr.IsDBNull(3) else dr.GetString(3)  
+        iNotes    = '' if dr.IsDBNull(4) else dr.GetString(4)   
+
+        mItem.append(DeptChecklist(myID=iID, myDisplayOrder=iDO, myItemText=iItemText, myDone=iAnswerYN, myNotes=iNotes))
+
+    dr.Close()
+  _tikitDbAccess.Close
+
+  dg_DeptChecklist.ItemsSource = mItem
+
+  return
+
+def checkForDepartmentChecklist_pullFromTemplate():
+
+  selEntity = lbl_EntRef.Content
+  selMatter = lbl_MatNo.Content
+  errorMsgTitle = "Department Checklist - Add defaults error..."
+
+  # firstly, check to see if there is anything currently in Dept Checklist for current matter
+  countCurrItems = int(_tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureChecklist WHERE EntityRef = '{entRef}' AND MatterNo = {matNo}]".format(entRef=selEntity, matNo=selMatter)))
+
+  # if there is something there already, exit now returning 'true'
+  if countCurrItems > 0:
+    return True
+
+
+  # otherwise, if there is nothing, then see if there's anything at 'CaseType' level in the 'Templates' 
+  # get Case Type for matter
+  matCaseType = _tikitResolver.Resolve("[SQL: SELECT CaseTypeID FROM Matters WHERE EntityRef = '{entRef}' AND Number = {matNo})]".format(entRef=selEntity, matNo=selMatter))
+  countCaseType = int(_tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureTemplates WHERE CaseTypeID = {caseTypeID}]".format(caseTypeID=matCaseType)))
+
+  if countCaseType > 0:
+    # Pull-down case type level items and exit
+    insSQL = """[SQL: INSERT INTO Usr_FileClosureChecklist(EntityRef, MatterNo, DisplayOrder, ItemText, AnswerYN, Notes)
+                SELECT '{entRef}', {matNo}, DisplayOrder, ItemText, 'N', '' 
+                FROM Usr_FileClosureTemplates WHERE CaseTypeID = {caseTypeId} ORDER BY DisplayOrder]""".format(entRef=selEntity, matNo=selMatter, caseTypeId=matCaseType)
+
+    try:
+      _tikitResolver.Resolve(insSQL)
+    except:
+      MessageBox.Show("There was an error pulling-down the Case Type defaults!\n\nSQL: {sql}".format(insSQL), errorMsgTitle)
+    return True
+
+  # finally, if there are not 'CaseType' specific templates, see if there are any applicable to 'Dept'
+  # get department of this matter
+  matDeptSQL = """[SQL: SELECT CTG.Name, CTG.Department FROM Matters M
+	                  JOIN CaseTypes CT ON M.CaseTypeRef = CT.Code
+	                  JOIN CaseTypeGroups CTG ON CT.CaseTypeGroupRef = CTG.ID
+                  WHERE M.EntityRef = '{entRef}' AND M.Number = {matNo}]""".format(entRef=selEntity, matNo=selMatter)
+  matDept = _tikitResolver.Resolve(matDeptSQL)
+
+  # get count of template items at dept level
+  countDept = int(_tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureTemplates WHERE Department = '{dept}']".format(dept=matDept)))
+
+  if countDept == 0:
+    # nothing at department level either, exit (nothing to pull down) 
+    MessageBox.Show("There don't appear to be any template defaults for the current matter 'CaseType' nor 'Department'", errorMsgTitle)
+    return False
+
+  else:
+    # Pull-down department level items and exit
+    insSQL = """[SQL: INSERT INTO Usr_FileClosureChecklist(EntityRef, MatterNo, DisplayOrder, ItemText, AnswerYN, Notes)
+                SELECT '{entRef}', {matNo}, DisplayOrder, ItemText, 'N', ''
+                FROM Usr_FileClosureTemplates WHERE Department = '{dept}' ORDER BY DisplayOrder]""".format(entRef=selEntity, matNo=selMatter, dept=matDept)
+
+    try:
+      _tikitResolver.Resolve(insSQL)
+    except:
+      MessageBox.Show("There was an error pulling-down the Department defaults!\n\nSQL: {sql}".format(insSQL), errorMsgTitle)
+    return True
+
+
+def dg_DeptChecklist_SelectionChanged(s, event):
+  #! Linked to XAML control.event: dg_DeptChecklist.SelectionChanged
+  # When the selection is changed in the datagrid, we populate some hidden labels on the form, so that we can test the 'before update'
+  # against current value entered in DG to see if now different and requires updating to the Database.
+
+  if dg_DeptChecklist.SelectedIndex == -1:
+    # nothing selected so fill with empty string
+    lbl_DAC_ID.Content = ''
+    lbl_DAC_DoneYN.Content = ''
+    lbl_DAC_Notes.Content = ''
+  else:
+    # something IS selected, so populate with those details
+    lbl_DAC_ID.Content = dg_DeptChecklist.SelectedItem['ID']
+    lbl_DAC_DoneYN.Content = dg_DeptChecklist.SelectedItem['DoneYN']
+    lbl_DAC_Notes.Content = dg_DeptChecklist.SelectedItem['Notes']
+  return
+
+
+def dg_DeptChecklist_CellEditEnding(s, event):
+  #! Linked to XAML control.event: dg_DeptChecklist.CellEditEnding
+  # When user has finished editing a datagrid row, this code will fire, where we then test values against those in labels and update any that differ
+
+  tmpCol = event.Column.Header
+  tmpSQL = "UPDATE Usr_FileClosureChecklist SET "
+  newDoneYN = dg_DeptChecklist.SelectedItem['DoneYN']
+  newNotes = dg_DeptChecklist.SelectedItem['Notes']
+  newNotesSQL = newNotes.replace("'", "''")
+  countToUpdate = 0
+  IDtoUpdate = lbl_DAC_ID.Content
+
+  if tmpCol == 'Done?':
+    if str(newDoneYN) != lbl_DAC_DoneYN.Content:
+      tmpSQL += "AnswerYN = '{0}' ".format(newDoneYN)
+      countToUpdate += 1
+  
+  if tmpCol == 'Notes':
+    if str(newNotes) != lbl_DAC_Notes.Content:
+      if countToUpdate == 0:
+        tmpSQL += "Notes = '{0}'".format(newNotesSQL) 
+      else:
+        tmpSQL += ", Notes = '{0}'".format(newNotesSQL) 
+
+  if countToUpdate > 0 and int(IDtoUpdate) > 0:
+    tmpSQL += "WHERE ID = {0}".format(IDtoUpdate)
+    try:
+      _tikitResolver.Resolve("[SQL: {0}]".format(tmpSQL))
+    except:
+      MessageBox.Show("There was an error updating the Department Checklist!\n\nSQL: {0}".format(tmpSQL), "Department Checklist update error...")
+  return
+
+
 ]]>
     </Init>
     <Loaded>
@@ -2104,6 +2272,16 @@ lbl_UnprocessedSlips = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_Unpr
 lbl_NonZeroBals = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_NonZeroBals')
 lbl_PostToReview = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_PostToReview')
 lbl_CheckedOutDocs = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_CheckedOutDocs')
+
+# dept checklist
+ti_DeptChecklist = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'ti_DeptChecklist')
+dg_DeptChecklist = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'dg_DeptChecklist')
+dg_DeptChecklist.SelectionChanged += dg_DeptChecklist_SelectionChanged
+dg_DeptChecklist.CellEditEnding += cellEdit_Finished
+# labels to temp store selected DG item details
+lbl_DAC_ID = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_DAC_ID')
+lbl_DAC_DoneYN = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_DAC_DoneYN')
+lbl_DAC_Notes = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_DAC_Notes')
 
 ti_OsAppts = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'ti_OsAppts')
 dg_OutstandingAppointments = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'dg_OutstandingAppointments')
