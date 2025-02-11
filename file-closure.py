@@ -2040,7 +2040,7 @@ class DeptChecklist(object):
     else:
       return None
 
-def refresh_DepartmentChecklist(s, event):
+def refresh_DepartmentChecklist():
 
   if checkForDepartmentChecklist_pullFromTemplate() == False:
     #MessageBox.Show("No items for current Case Type or Department - list will not 'refresh'")
