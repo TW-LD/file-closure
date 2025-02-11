@@ -224,13 +224,11 @@ def cellEdit_Finished(s, event):
   # Get column name
   tmpCol = event.Column
   tmpColName = tmpCol.Header    
-  #newDate = getSQLDate(_tikitResolver.Resolve("[SQL: SELECT GETDATE()]"))
   tmpEntity = dg_WIPReview.SelectedItem['EntityRef']
   tmpMatter = dg_WIPReview.SelectedItem['MatterNo']
   tmpNote = str(dg_WIPReview.SelectedItem['FENote'])
   updateSQL = 'UPDATE Usr_FileClosureHeader SET '
   countToUpdate = 0
-  global UserIsHOD
 
   # count if there are any rows in Usr_AccWIP and if zero, add a new row with default data
   countExistingRows = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureHeader WHERE EntityRef = '{0}' AND MatterNo = {1}]".format(tmpEntity, tmpMatter))
@@ -251,14 +249,7 @@ def cellEdit_Finished(s, event):
     updateSQL += "WHERE ID = {0}".format(IDtoUpdate)
     _tikitResolver.Resolve("[SQL: {0}]".format(updateSQL))
    
-    countFEreply = _tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureHeader WHERE UserCode = '{0}']".format(_tikitUser))
-    if int(countFEreply) == 0:
-      _tikitResolver.Resolve("[SQL: INSERT INTO Usr_FileClosureHeader (UserCode, LastUpdated, EntityRef, MatterNo) VALUES ('{0}', '{1}', '{entity}', '{matter}')]".format(_tikitUser, newDate, entity=tmpEntity, matter=tmpMatter))
-    else:
-      _tikitResolver.Resolve("[SQL: UPDATE Usr_FileClosureHeader SET LastUpdated = '{0}' WHERE UserCode = '{1}']".format(newDate, _tikitUser))
-
-  # just update the ticked counter
-  return
+    return
 
 
 class UsersList(object):
@@ -624,7 +615,8 @@ def toggle_ViewArchiveMatterDetails(s, event):
 
   if btn_ViewArchiveDetails.IsChecked == False:
     # unload DataGrids
-    dg_DeptChecklist.ItemSource = None
+    #if dg_DeptChecklist.ItemSource != None:
+    #  dg_DeptChecklist.ItemSource = None
     dg_OutstandingAppointments.ItemsSource = None
     dg_OutstandingTasks.ItemsSource = None
     dg_Undertakings.ItemsSource = None
@@ -2090,8 +2082,9 @@ def checkForDepartmentChecklist_pullFromTemplate():
 
   # otherwise, if there is nothing, then see if there's anything at 'CaseType' level in the 'Templates' 
   # get Case Type for matter
-  matCaseType = _tikitResolver.Resolve("[SQL: SELECT CaseTypeID FROM Matters WHERE EntityRef = '{entRef}' AND Number = {matNo})]".format(entRef=selEntity, matNo=selMatter))
+  matCaseType = _tikitResolver.Resolve("[SQL: SELECT CaseTypeRef FROM Matters WHERE EntityRef = '{entRef}' AND Number = {matNo}]".format(entRef=selEntity, matNo=selMatter))
   countCaseType = int(_tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureTemplates WHERE CaseTypeID = {caseTypeID}]".format(caseTypeID=matCaseType)))
+  #MessageBox.Show("Checking for Defaults stored at 'Case Type' level\nMatter Case Type: {0}\nCount Of Template items: {1}".format(matCaseType, countCaseType), "DEBUG MESSAGE - ADDING DEFAULTS")
 
   if countCaseType > 0:
     # Pull-down case type level items and exit
@@ -2106,8 +2099,8 @@ def checkForDepartmentChecklist_pullFromTemplate():
     return True
 
   # finally, if there are not 'CaseType' specific templates, see if there are any applicable to 'Dept'
-  # get department of this matter
-  matDeptSQL = """[SQL: SELECT CTG.Name, CTG.Department FROM Matters M
+  # get department of this matter  (CTG.Name, )
+  matDeptSQL = """[SQL: SELECT CTG.Department FROM Matters M
 	                  JOIN CaseTypes CT ON M.CaseTypeRef = CT.Code
 	                  JOIN CaseTypeGroups CTG ON CT.CaseTypeGroupRef = CTG.ID
                   WHERE M.EntityRef = '{entRef}' AND M.Number = {matNo}]""".format(entRef=selEntity, matNo=selMatter)
@@ -2115,6 +2108,7 @@ def checkForDepartmentChecklist_pullFromTemplate():
 
   # get count of template items at dept level
   countDept = int(_tikitResolver.Resolve("[SQL: SELECT COUNT(ID) FROM Usr_FileClosureTemplates WHERE Department = '{dept}']".format(dept=matDept)))
+  #MessageBox.Show("Checking for Defaults stored at 'Department' level\nMatter Dept: {0}\nCount Of Template items: {1}".format(matDept, countDept), "DEBUG MESSAGE - ADDING DEFAULTS")
 
   if countDept == 0:
     # nothing at department level either, exit (nothing to pull down) 
@@ -2159,10 +2153,11 @@ def dg_DeptChecklist_CellEditEnding(s, event):
   tmpCol = event.Column.Header
   tmpSQL = "UPDATE Usr_FileClosureChecklist SET "
   newDoneYN = dg_DeptChecklist.SelectedItem['DoneYN']
-  newNotes = dg_DeptChecklist.SelectedItem['Notes']
+  newNotes = str(dg_DeptChecklist.SelectedItem['Notes'])
   newNotesSQL = newNotes.replace("'", "''")
   countToUpdate = 0
   IDtoUpdate = lbl_DAC_ID.Content
+  oldNote = str(lbl_DAC_Notes.Content)
 
   if tmpCol == 'Done?':
     if str(newDoneYN) != lbl_DAC_DoneYN.Content:
@@ -2170,11 +2165,12 @@ def dg_DeptChecklist_CellEditEnding(s, event):
       countToUpdate += 1
   
   if tmpCol == 'Notes':
-    if str(newNotes) != lbl_DAC_Notes.Content:
+    if str(newNotes) != oldNote:
       if countToUpdate == 0:
         tmpSQL += "Notes = '{0}'".format(newNotesSQL) 
       else:
-        tmpSQL += ", Notes = '{0}'".format(newNotesSQL) 
+        tmpSQL += ", Notes = '{0}'".format(newNotesSQL)
+      countToUpdate += 1 
 
   if countToUpdate > 0 and int(IDtoUpdate) > 0:
     tmpSQL += "WHERE ID = {0}".format(IDtoUpdate)
@@ -2279,7 +2275,7 @@ lbl_CheckedOutDocs = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_Checke
 ti_DeptChecklist = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'ti_DeptChecklist')
 dg_DeptChecklist = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'dg_DeptChecklist')
 dg_DeptChecklist.SelectionChanged += dg_DeptChecklist_SelectionChanged
-dg_DeptChecklist.CellEditEnding += cellEdit_Finished
+dg_DeptChecklist.CellEditEnding += dg_DeptChecklist_CellEditEnding
 # labels to temp store selected DG item details
 lbl_DAC_ID = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_DAC_ID')
 lbl_DAC_DoneYN = LogicalTreeHelper.FindLogicalNode(_tikitSender, 'lbl_DAC_DoneYN')
