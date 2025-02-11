@@ -624,6 +624,7 @@ def toggle_ViewArchiveMatterDetails(s, event):
 
   if btn_ViewArchiveDetails.IsChecked == False:
     # unload DataGrids
+    dg_DeptChecklist.ItemSource = None
     dg_OutstandingAppointments.ItemsSource = None
     dg_OutstandingTasks.ItemsSource = None
     dg_Undertakings.ItemsSource = None
@@ -651,6 +652,7 @@ def populate_andSetTabVisibility_MatterArchiveDetails():
   refresh_NonzeroBalances()
   refresh_PostToReview()
   refresh_CheckedOutDocuments()
+  refresh_DepartmentChecklist()
 
   # now set visibility based on DataGrid.Items.Count
   if dg_OutstandingAppointments.Items.Count == 0:
